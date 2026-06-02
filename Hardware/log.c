@@ -1,50 +1,22 @@
 #include "log.h"
-#include "motor_control.h"
-#include "pump_valve.h"
-#include "sensor.h"
 #include "system_monitor.h"
-#include "temp_control.h"
 #include "usart.h"
-#include "uv_lamp.h"
 #include <stdarg.h>
 #include <stdio.h>
 #include <string.h>
 
-
-//环形缓冲区总长度
 #ifndef LOGGING_TX_BUFFER_LEN
 #define LOGGING_TX_BUFFER_LEN       512U
 #endif
 
-// DMA 每次发送的最大字节数
 #ifndef LOGGING_TX_DMA_CHUNK_LEN
 #define LOGGING_TX_DMA_CHUNK_LEN    64U
 #endif
 
-// printf 格式化缓冲区大小
 #ifndef LOGGING_PRINTF_BUFFER_LEN
 #define LOGGING_PRINTF_BUFFER_LEN   160U
 #endif
 
-// 电流调试输出开关：1=日志打印按摩电机/水泵电流，0=保持原日志格式
-#ifndef LOGGING_ENABLE_CURRENT_DEBUG
-#define LOGGING_ENABLE_CURRENT_DEBUG  1U
-#endif
-
-// Water count debug output. Set to 0U to hide WC=xxxx from status logs.
-#ifndef LOGGING_ENABLE_WATER_COUNT_DEBUG
-#define LOGGING_ENABLE_WATER_COUNT_DEBUG  1U
-#endif
-
-#if (LOGGING_ENABLE_WATER_COUNT_DEBUG != 0U)
-#define LOGGING_WATER_COUNT_FMT       " WC=%lu"
-#define LOGGING_WATER_COUNT_ARG       , Sensor_GetWaterFrequencyHz()
-#else
-#define LOGGING_WATER_COUNT_FMT
-#define LOGGING_WATER_COUNT_ARG
-#endif
-
-//重定义fputc函数，使printf函数能够通过UART发送数据
 #if defined(__CC_ARM)
 #pragma import(__use_no_semihosting)
 struct __FILE
@@ -59,24 +31,23 @@ void _sys_exit(int x)
 }
 #endif
 
+static volatile HAL_StatusTypeDef logging_last_status = HAL_OK;
+/* 软件环形缓冲区：业务任务写入日志，DMA 任务分块搬运到串口。 */
+static uint8_t logging_tx_buffer[LOGGING_TX_BUFFER_LEN];
+static uint8_t logging_tx_dma_buffer[LOGGING_TX_DMA_CHUNK_LEN];
+static volatile uint16_t logging_tx_head;
+static volatile uint16_t logging_tx_tail;
+static volatile uint8_t logging_dma_busy;
 
-static volatile HAL_StatusTypeDef logging_last_status = HAL_OK;   //最后一次操作状态
-static uint8_t logging_tx_buffer[LOGGING_TX_BUFFER_LEN];          //日志环形缓冲区
-static uint8_t logging_tx_dma_buffer[LOGGING_TX_DMA_CHUNK_LEN];   // DMA 发送缓存
-static volatile uint16_t logging_tx_head;                   //环形缓冲区头索引      
-static volatile uint16_t logging_tx_tail;                   //环形缓冲区尾索引
-static volatile uint8_t logging_dma_busy;                   //DMA 发送忙标志
-
-//恢复中断状态
 static void Logging_RestoreIrq(uint32_t primask)
 {
+  /* 只在进入临界区前中断是开启状态时恢复，避免破坏外层临界区。 */
   if (primask == 0U)
   {
     __enable_irq();
   }
 }
 
-//计算下一个索引位置
 static uint16_t Logging_NextIndex(uint16_t index)
 {
   index++;
@@ -87,15 +58,17 @@ static uint16_t Logging_NextIndex(uint16_t index)
   return index;
 }
 
-//启动DMA发送日志数据
 static void Logging_StartTxDma(void)
 {
   HAL_StatusTypeDef status;
   uint32_t primask;
-  uint16_t length;
+  uint16_t length = 0U;
   uint16_t next_tail;
 
-  length = 0U;
+  /*
+   * 从环形缓冲区复制一小段到 DMA 专用缓冲区。
+   * DMA 正在发送时不能直接使用环形缓冲区，因为 head/tail 会继续变化。
+   */
   primask = __get_PRIMASK();
   __disable_irq();
   if ((logging_dma_busy != 0U) || (logging_tx_head == logging_tx_tail))
@@ -123,8 +96,9 @@ static void Logging_StartTxDma(void)
     return;
   }
 
-  status = HAL_UART_Transmit_DMA(&huart3, logging_tx_dma_buffer, length);
+  status = HAL_UART_Transmit_DMA(&huart1, logging_tx_dma_buffer, length);
   logging_last_status = status;
+
   primask = __get_PRIMASK();
   __disable_irq();
   if (status == HAL_OK)
@@ -138,20 +112,19 @@ static void Logging_StartTxDma(void)
   Logging_RestoreIrq(primask);
 }
 
-//往环形缓冲区写入数据，并尝试启动DMA发送
 static void Logging_WriteBuffer(const uint8_t *data, uint16_t length)
 {
   uint16_t next_head;
   uint16_t index;
   uint32_t primask;
-  uint8_t overflow;
+  uint8_t overflow = 0U;
 
   if ((data == NULL) || (length == 0U))
   {
     return;
   }
 
-  overflow = 0U;
+  /* 写环形缓冲区时短暂关中断，防止 DMA 完成回调同时移动 tail。 */
   primask = __get_PRIMASK();
   __disable_irq();
   for (index = 0U; index < length; index++)
@@ -172,18 +145,15 @@ static void Logging_WriteBuffer(const uint8_t *data, uint16_t length)
   Logging_StartTxDma();
 }
 
-//重定义fputc函数，使printf函数能够通过UART发送数据
 int fputc(int ch, FILE *f)
 {
-  uint8_t data;
+  uint8_t data = (uint8_t)ch;
 
   (void)f;
-  data = (uint8_t)ch;
   Logging_WriteBuffer(&data, 1U);
   return ch;
 }
 
-//日志模块初始化
 void Logging_Init(void)
 {
   uint32_t primask;
@@ -196,44 +166,41 @@ void Logging_Init(void)
   logging_last_status = HAL_OK;
   Logging_RestoreIrq(primask);
 
-  //调试信息，表明日志模块已初始化完成，UART3 可用
-  Logging_Print("LOG is ready\r\n");
+  Logging_Print("BASE LOG is ready\r\n");
 }
 
-//打印字符串
 void Logging_Print(const char *msg)
 {
   size_t length;
   uint16_t chunk;
 
-  if (msg != NULL)
+  if (msg == NULL)
+  {  
+    return;
+  }
+
+  length = strlen(msg);
+  while (length > 0U)
   {
-    length = strlen(msg);
-    while (length > 0U)
-    {
-      chunk = (length > 0xFFFFU) ? 0xFFFFU : (uint16_t)length;
-      Logging_WriteBuffer((const uint8_t *)msg, chunk);
-      msg += chunk;
-      length -= chunk;
-    }
+    chunk = (length > 0xFFFFU) ? 0xFFFFU : (uint16_t)length;
+    Logging_WriteBuffer((const uint8_t *)msg, chunk);
+    msg += chunk;
+    length -= chunk;
   }
 }
 
-
-//格式化打印，类似于printf函数
 void Logging_Printf(const char *fmt, ...)
 {
   va_list args;
   char buffer[LOGGING_PRINTF_BUFFER_LEN];
   int length;
-  uint8_t truncated;
+  uint8_t truncated = 0U;
 
   if (fmt == NULL)
   {
     return;
   }
 
-  truncated = 0U;
   va_start(args, fmt);
   length = vsnprintf(buffer, sizeof(buffer), fmt, args);
   va_end(args);
@@ -243,6 +210,7 @@ void Logging_Printf(const char *fmt, ...)
     logging_last_status = HAL_ERROR;
     return;
   }
+
   if ((size_t)length >= sizeof(buffer))
   {
     length = (int)(sizeof(buffer) - 1U);
@@ -256,69 +224,29 @@ void Logging_Printf(const char *fmt, ...)
   }
 }
 
-//日志任务处理函数，负责定期打印系统状态信息
 void Logging_TaskProcess(void)
 {
-  int16_t temp_x10;
-  char sign;
-  uint16_t battery_dv;
-
-  temp_x10 = Sensor_GetTemperatureCx10();
-  sign = '+';
-  if (temp_x10 < 0)
-  {
-    sign = '-';
-    temp_x10 = (int16_t)(-temp_x10);
-  }
-
-  battery_dv = Sensor_GetBatteryDeciVolt();
-#if (LOGGING_ENABLE_CURRENT_DEBUG != 0U)
-  Logging_Printf("T=%c%d.%uC W=%uL" LOGGING_WATER_COUNT_FMT " BAT=%u.%uV M=%u P=%u H=%u UV=%u MI=%umA PI=%umA ERR=%02X/%02X\r\n",
-                 sign,
-                 temp_x10 / 10,
-                 (uint8_t)(temp_x10 % 10),
-                 Sensor_GetWaterLevelProtocol()
-                 LOGGING_WATER_COUNT_ARG,
-                 battery_dv / 10U,
-                 battery_dv % 10U,
-                 Motor_GetLevel(),
-                 (uint8_t)PumpValve_GetMode(),
-                 Temp_IsHeating(),
-                 UV_IsOn(),
-                 Sensor_GetMotorCurrentMa(),
-                 Sensor_GetPumpCurrentMa(),
+  /* 每秒打印一次核心状态，便于通过 LinuxTX1/LinuxRX1 日志口观察流程。 */
+  Logging_Printf("BASE CMD=%02X LINK=%u ST=%u/%u TS=%lus ERR=%02X/%02X\r\n",
+                 SystemMonitor_GetCommand(),
+                 SystemMonitor_GetLinkStatus(),
+                 SystemMonitor_GetMainStatus(),
+                 SystemMonitor_GetSubStatus(),
+                 SystemMonitor_GetTimerRemainingSec(),
                  SystemMonitor_GetErrCode1(),
                  SystemMonitor_GetErrCode2());
-#else
-  Logging_Printf("T=%c%d.%uC W=%uL" LOGGING_WATER_COUNT_FMT " BAT=%u.%uV M=%u P=%u H=%u UV=%u ERR=%02X/%02X\r\n",
-                 sign,
-                 temp_x10 / 10,
-                 (uint8_t)(temp_x10 % 10),
-                 Sensor_GetWaterLevelProtocol()
-                 LOGGING_WATER_COUNT_ARG,
-                 battery_dv / 10U,
-                 battery_dv % 10U,
-                 Motor_GetLevel(),
-                 (uint8_t)PumpValve_GetMode(),
-                 Temp_IsHeating(),
-                 UV_IsOn(),
-                 SystemMonitor_GetErrCode1(),
-                 SystemMonitor_GetErrCode2());
-#endif
 }
 
-// 获取最后状态
 HAL_StatusTypeDef Logging_GetLastStatus(void)
 {
   return logging_last_status;
 }
 
-//DMA发送回调
 void Logging_TxCpltCallback(UART_HandleTypeDef *huart)
 {
   uint32_t primask;
 
-  if (huart != &huart3)
+  if (huart != &huart1)
   {
     return;
   }
@@ -331,12 +259,11 @@ void Logging_TxCpltCallback(UART_HandleTypeDef *huart)
   Logging_StartTxDma();
 }
 
-//串口错误回调
 void Logging_ErrorCallback(UART_HandleTypeDef *huart)
 {
   uint32_t primask;
 
-  if (huart != &huart3)
+  if (huart != &huart1)
   {
     return;
   }

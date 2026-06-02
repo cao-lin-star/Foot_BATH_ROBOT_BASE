@@ -22,8 +22,6 @@ foot_bath_robot1\color_light.o: ../Drivers/STM32F1xx_HAL_Driver/Inc/stm32f1xx_ha
 foot_bath_robot1\color_light.o: ../Drivers/STM32F1xx_HAL_Driver/Inc/stm32f1xx_hal_dma.h
 foot_bath_robot1\color_light.o: ../Drivers/STM32F1xx_HAL_Driver/Inc/stm32f1xx_hal_dma_ex.h
 foot_bath_robot1\color_light.o: ../Drivers/STM32F1xx_HAL_Driver/Inc/stm32f1xx_hal_cortex.h
-foot_bath_robot1\color_light.o: ../Drivers/STM32F1xx_HAL_Driver/Inc/stm32f1xx_hal_adc.h
-foot_bath_robot1\color_light.o: ../Drivers/STM32F1xx_HAL_Driver/Inc/stm32f1xx_hal_adc_ex.h
 foot_bath_robot1\color_light.o: ../Drivers/STM32F1xx_HAL_Driver/Inc/stm32f1xx_hal_flash.h
 foot_bath_robot1\color_light.o: ../Drivers/STM32F1xx_HAL_Driver/Inc/stm32f1xx_hal_flash_ex.h
 foot_bath_robot1\color_light.o: ../Drivers/STM32F1xx_HAL_Driver/Inc/stm32f1xx_hal_pwr.h

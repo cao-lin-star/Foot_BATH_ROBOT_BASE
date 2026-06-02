@@ -1,19 +1,43 @@
 #include "motor_control.h"
-#include "sensor.h"
 #include "tim.h"
 
-static uint8_t motor_level;           //电机档位：0=停止，1/2/3档
-static uint8_t motor_manual_duty;     //手动占空比（0~100%）
-static uint8_t motor_running;         //电机运行状态 0=停止 1=运行
-static uint8_t motor_fault;           //电机故障标志 0=正常 1=故障
-static uint8_t motor_auto_reverse;      //自动反转使能 0=禁用 1=启用
-static uint32_t motor_reverse_interval_ms = MOTOR_AUTO_REVERSE_MS;    //自动反转间隔时间（毫秒）
-static uint32_t motor_last_reverse_tick;                              //上次反转时间，用于自动反转计时
-static MotorDirection_t motor_direction = MOTOR_DIR_FORWARD;          //电机当前转向
+/* 当前喷淋电机的缓存状态，用于状态查询和周期任务刷新输出。 */
+static uint8_t motor_level;
+static uint8_t motor_duty;
+static uint8_t motor_running;
+static uint8_t motor_fault;
+static MotorDirection_t motor_direction;
 
-//根据档位获取对应的占空比
+/*
+ * 将百分比占空比转换为定时器 CCR 值。
+ * TIM 的 Period 由 CubeMX 配置决定；这里用 Period+1 计算完整周期，
+ * 再限制到 Period，避免 100% 时越界。
+ */
+static uint32_t Motor_DutyToPulse(TIM_HandleTypeDef *htim, uint8_t duty_percent)
+{
+  uint32_t period;
+  uint32_t pulse;
+
+  if (duty_percent > 100U)
+  {
+    duty_percent = 100U;
+  }
+
+  period = htim->Init.Period;
+  pulse = ((period + 1U) * duty_percent) / 100U;
+  if (pulse > period)
+  {
+    pulse = period;
+  }
+  return pulse;
+}
+
 static uint8_t Motor_LevelToDuty(uint8_t level)
 {
+  /*
+   * 档位到 PWM 的经验值。
+   * 低档避免电机低占空比无法启动，因此从 35% 起步。
+   */
   switch (level)
   {
     case 1U:
@@ -27,119 +51,89 @@ static uint8_t Motor_LevelToDuty(uint8_t level)
   }
 }
 
-//将占空比转换为定时器比较值
-static uint32_t Motor_DutyToPulse(TIM_HandleTypeDef *htim, uint8_t duty_percent)
+static void Motor_ApplyDc(uint8_t duty_percent, MotorDirection_t direction)
 {
-  uint32_t period;
-  uint32_t pulse;
-
-  period = htim->Init.Period;
-  if (duty_percent > 100U)
-  {
-    duty_percent = 100U;
-  }
-  pulse = ((period + 1U) * duty_percent) / 100U;
-  if (pulse > period)
-  {
-    pulse = period;
-  }
-  return pulse;
-}
-
-//设置定时器通道的占空比
-static void Motor_SetTimerChannel(TIM_HandleTypeDef *htim, uint32_t channel, uint8_t duty_percent)
-{
-  __HAL_TIM_SET_COMPARE(htim, channel, Motor_DutyToPulse(htim, duty_percent));
-}
-
-static void Motor_ApplyPwm(uint8_t duty_percent, MotorDirection_t direction)
-{
-#if MOTOR_USE_TIM4_PWM
+  /*
+   * 直流电机模式：
+   *   PWM_A 有占空比、PWM_B 为 0 -> 正向
+   *   PWM_A 为 0、PWM_B 有占空比 -> 反向
+   * 两路不同时输出 PWM，避免 H 桥直通风险。
+   */
   if (direction == MOTOR_DIR_FORWARD)
   {
-    Motor_SetTimerChannel(&htim4, TIM_CHANNEL_1, duty_percent);
-    Motor_SetTimerChannel(&htim4, TIM_CHANNEL_2, 0U);
-    Motor_SetTimerChannel(&htim4, TIM_CHANNEL_3, duty_percent);
-    Motor_SetTimerChannel(&htim4, TIM_CHANNEL_4, 0U);
+    __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_1, Motor_DutyToPulse(&htim1, duty_percent));
+    __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_4, 0U);
   }
   else
   {
-    Motor_SetTimerChannel(&htim4, TIM_CHANNEL_1, 0U);
-    Motor_SetTimerChannel(&htim4, TIM_CHANNEL_2, duty_percent);
-    Motor_SetTimerChannel(&htim4, TIM_CHANNEL_3, 0U);
-    Motor_SetTimerChannel(&htim4, TIM_CHANNEL_4, duty_percent);
+    __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_1, 0U);
+    __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_4, Motor_DutyToPulse(&htim1, duty_percent));
   }
-#endif
+}
 
-#if MOTOR_USE_TIM1_PWM
-  if (direction == MOTOR_DIR_FORWARD)
-  {
-    Motor_SetTimerChannel(&htim1, TIM_CHANNEL_1, duty_percent);
-    Motor_SetTimerChannel(&htim1, TIM_CHANNEL_4, 0U);
-  }
-  else
-  {
-    Motor_SetTimerChannel(&htim1, TIM_CHANNEL_1, 0U);
-    Motor_SetTimerChannel(&htim1, TIM_CHANNEL_4, duty_percent);
-  }
+static void Motor_Apply(uint8_t duty_percent)
+{
+#if (BASE_SPRAY_MOTOR_MODE == BASE_SPRAY_MOTOR_STEPPER)
+  /*
+   * 步进模式预留：
+   *   CH2 输出 STEP 脉冲；
+   *   CH3 用高/低电平表达方向；
+   *   CH4 用高/低电平表达使能。
+   * 当前未加入步数闭环，只提供可编译、可点动的输出框架。
+   */
+  __HAL_TIM_SET_COMPARE(&htim3, TIM_CHANNEL_2, Motor_DutyToPulse(&htim3, duty_percent));
+  __HAL_TIM_SET_COMPARE(&htim3, TIM_CHANNEL_3,
+                        (motor_direction == MOTOR_DIR_FORWARD) ? htim3.Init.Period : 0U);
+  __HAL_TIM_SET_COMPARE(&htim3, TIM_CHANNEL_4, (duty_percent != 0U) ? htim3.Init.Period : 0U);
+#else
+  Motor_ApplyDc(duty_percent, motor_direction);
 #endif
 }
 
-//电机控制模块初始化
 void Motor_Init(void)
 {
-#if MOTOR_USE_TIM4_PWM
-  HAL_TIM_PWM_Start(&htim4, TIM_CHANNEL_1);
-  HAL_TIM_PWM_Start(&htim4, TIM_CHANNEL_2);
-  HAL_TIM_PWM_Start(&htim4, TIM_CHANNEL_3);
-  HAL_TIM_PWM_Start(&htim4, TIM_CHANNEL_4);
-#endif
-
-#if MOTOR_USE_TIM1_PWM
+  /*
+   * 两种电机硬件通道都启动 PWM：
+   *   默认直流模式实际只使用 TIM1；
+   *   步进模式切换宏后使用 TIM3。
+   * 提前启动不会产生有效输出，因为后面会统一写 0。
+   */
   HAL_TIM_PWM_Start(&htim1, TIM_CHANNEL_1);
   HAL_TIM_PWM_Start(&htim1, TIM_CHANNEL_4);
-#endif
+  HAL_TIM_PWM_Start(&htim3, TIM_CHANNEL_2);
+  HAL_TIM_PWM_Start(&htim3, TIM_CHANNEL_3);
+  HAL_TIM_PWM_Start(&htim3, TIM_CHANNEL_4);
 
   motor_level = 0U;
-  motor_manual_duty = 0U;
+  motor_duty = 0U;
   motor_running = 0U;
   motor_fault = 0U;
-  motor_auto_reverse = 0U;
   motor_direction = MOTOR_DIR_FORWARD;
-  motor_last_reverse_tick = HAL_GetTick();
-  Motor_ApplyPwm(0U, motor_direction);
+  Motor_Apply(0U);
 }
 
-//设置电机运行速度和方向
 void Motor_Run(uint8_t speed, uint8_t direction)
 {
+  /* speed 作为直接百分比控制，主要给喷淋动作或调试点动使用。 */
   motor_direction = (direction != 0U) ? MOTOR_DIR_REVERSE : MOTOR_DIR_FORWARD;
-  if (speed <= 3U)
+  if (speed > 100U)
   {
-    Motor_SetLevel(speed);
+    speed = 100U;
   }
-  else
-  {
-    if (speed > 100U)
-    {
-      speed = 100U;
-    }
-    motor_level = 1U;
-    motor_manual_duty = speed;
-    motor_running = (speed != 0U) ? 1U : 0U;
-  }
+  motor_level = (speed == 0U) ? 0U : 1U;
+  motor_duty = speed;
+  motor_running = (speed != 0U) ? 1U : 0U;
+  Motor_Apply(speed);
 }
 
-//  停止电机
 void Motor_Stop(void)
 {
   motor_level = 0U;
-  motor_manual_duty = 0U;
+  motor_duty = 0U;
   motor_running = 0U;
-  Motor_ApplyPwm(0U, motor_direction);
+  Motor_Apply(0U);
 }
 
-//设置电机档位（0=停止 1/2/3档）
 void Motor_SetLevel(uint8_t level)
 {
   if (level > 3U)
@@ -147,109 +141,62 @@ void Motor_SetLevel(uint8_t level)
     level = 3U;
   }
   motor_level = level;
-  motor_manual_duty = 0U;
+  motor_duty = Motor_LevelToDuty(level);
   motor_running = (level != 0U) ? 1U : 0U;
-  if (motor_running == 0U)
-  {
-    Motor_ApplyPwm(0U, motor_direction);
-  }
+  Motor_Apply(motor_duty);
 }
 
-//设置电机转向
 void Motor_SetDirection(MotorDirection_t direction)
 {
   motor_direction = direction;
-  motor_last_reverse_tick = HAL_GetTick();
+  Motor_Apply(motor_duty);
 }
 
-//设置自动反转功能
 void Motor_SetAutoReverse(uint8_t enable, uint32_t interval_ms)
 {
-  motor_auto_reverse = (enable != 0U) ? 1U : 0U;
-  if (interval_ms >= 5000UL)
-  {
-    motor_reverse_interval_ms = interval_ms;
-  }
-  motor_last_reverse_tick = HAL_GetTick();
+  (void)enable;
+  (void)interval_ms;
 }
 
-//获取当前电机档位
 uint8_t Motor_GetLevel(void)
 {
   return motor_level;
 }
 
-//获取当前占空比（0~100%）
 uint8_t Motor_GetDutyPercent(void)
 {
-  if (motor_manual_duty != 0U)
-  {
-    return motor_manual_duty;
-  }
-  return Motor_LevelToDuty(motor_level);
+  return motor_duty;
 }
 
-//获取当前转向
 MotorDirection_t Motor_GetDirection(void)
 {
   return motor_direction;
 }
 
-//检查电机是否正在运行
 uint8_t Motor_IsRunning(void)
 {
   return motor_running;
 }
 
-//检查电机是否发生故障
 uint8_t Motor_HasFault(void)
 {
   return motor_fault;
 }
 
-//清除电机故障状态
 void Motor_ClearFault(void)
 {
   motor_fault = 0U;
 }
 
-//电机控制任务处理函数，负责自动反转和过流保护
 void Motor_TaskProcess(void)
 {
-  uint32_t now;
-  uint16_t current_ma;
-  uint8_t duty;
-
-  now = HAL_GetTick();
-  // ===================== 1. 自动换向逻辑 =====================
-  // 如果电机运行中 && 自动反转开启 && 到达换向时间
-  if ((motor_running != 0U) &&
-      (motor_auto_reverse != 0U) &&
-      ((now - motor_last_reverse_tick) >= motor_reverse_interval_ms))
-  {
-    motor_direction = (motor_direction == MOTOR_DIR_FORWARD) ? MOTOR_DIR_REVERSE : MOTOR_DIR_FORWARD;
-    motor_last_reverse_tick = now;
-  }
-
-  current_ma = Sensor_GetMotorCurrentMa();
-  // ===================== 2. 过流保护 =====================
-  // 读取电机电流
-  if ((motor_running != 0U) && (current_ma > MOTOR_CURRENT_MAX_MA))
-  {
-    motor_fault = 1U;
-    Motor_Stop();
-    return;
-  }
-
-  // ===================== 3. 输出PWM控制电机 =====================
-  duty = Motor_GetDutyPercent();
-  // 根据运行状态输出速度或停止
+  /*
+   * 周期性刷新当前 PWM。
+   * 这样即使后续增加故障恢复、定时器重新初始化或自动换向，
+   * 也能统一放在本任务里处理。
+   */
   if (motor_running != 0U)
   {
-    Motor_ApplyPwm(duty, motor_direction);
-  }
-  else
-  {
-    Motor_ApplyPwm(0U, motor_direction);
+    Motor_Apply(motor_duty);
   }
 }

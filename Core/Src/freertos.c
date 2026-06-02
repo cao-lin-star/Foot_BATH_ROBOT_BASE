@@ -25,11 +25,8 @@
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
-#include "sensor.h"
-#include "temp_control.h"
+#include "color_light.h"
 #include "motor_control.h"
-#include "pump_valve.h"
-#include "uv_lamp.h"
 #include "uart_comm.h"
 #include "log.h"
 #include "system_monitor.h"
@@ -55,59 +52,31 @@
 /* USER CODE BEGIN Variables */
 
 /* USER CODE END Variables */
-/* Definitions for Task1 */
-osThreadId_t Task1Handle;
-const osThreadAttr_t Task1_attributes = {
-  .name = "Task1",
-  .stack_size = 256 * 4,
-  .priority = (osPriority_t) osPriorityHigh,
-};
-/* Definitions for Task2 */
-osThreadId_t Task2Handle;
-const osThreadAttr_t Task2_attributes = {
-  .name = "Task2",
-  .stack_size = 256 * 4,
-  .priority = (osPriority_t) osPriorityHigh,
-};
-/* Definitions for Task3 */
-osThreadId_t Task3Handle;
-const osThreadAttr_t Task3_attributes = {
-  .name = "Task3",
+/* Definitions for BaseMotorTask */
+osThreadId_t BaseMotorTaskHandle;
+const osThreadAttr_t BaseMotorTask_attributes = {
+  .name = "BaseMotor",
   .stack_size = 256 * 4,
   .priority = (osPriority_t) osPriorityNormal,
 };
-/* Definitions for Task4 */
-osThreadId_t Task4Handle;
-const osThreadAttr_t Task4_attributes = {
-  .name = "Task4",
+/* Definitions for BaseCommTask */
+osThreadId_t BaseCommTaskHandle;
+const osThreadAttr_t BaseCommTask_attributes = {
+  .name = "BaseComm",
   .stack_size = 256 * 4,
   .priority = (osPriority_t) osPriorityNormal,
 };
-/* Definitions for Task5 */
-osThreadId_t Task5Handle;
-const osThreadAttr_t Task5_attributes = {
-  .name = "Task5",
+/* Definitions for BaseLogTask */
+osThreadId_t BaseLogTaskHandle;
+const osThreadAttr_t BaseLogTask_attributes = {
+  .name = "BaseLog",
   .stack_size = 128 * 4,
   .priority = (osPriority_t) osPriorityLow,
 };
-/* Definitions for Task6 */
-osThreadId_t Task6Handle;
-const osThreadAttr_t Task6_attributes = {
-  .name = "Task6",
-  .stack_size = 256 * 4,
-  .priority = (osPriority_t) osPriorityNormal,
-};
-/* Definitions for Task7 */
-osThreadId_t Task7Handle;
-const osThreadAttr_t Task7_attributes = {
-  .name = "Task7",
-  .stack_size = 128 * 4,
-  .priority = (osPriority_t) osPriorityLow,
-};
-/* Definitions for Task8 */
-osThreadId_t Task8Handle;
-const osThreadAttr_t Task8_attributes = {
-  .name = "Task8",
+/* Definitions for BaseStateTask */
+osThreadId_t BaseStateTaskHandle;
+const osThreadAttr_t BaseStateTask_attributes = {  
+  .name = "BaseState",
   .stack_size = 128 * 4,
   .priority = (osPriority_t) osPriorityHigh,
 };
@@ -117,14 +86,10 @@ const osThreadAttr_t Task8_attributes = {
 
 /* USER CODE END FunctionPrototypes */
 
-void Sensor_Task(void *argument);
-void Temp_Control_Task(void *argument);
-void Motor_Task(void *argument);
-void Pump_Valve_Task(void *argument);
-void UV_Lamp_Task(void *argument);
-void Communication_Task(void *argument);
-void Logging_Task(void *argument);
-void System_Monitor_Task(void *argument);
+void BaseMotor_Task(void *argument);
+void BaseComm_Task(void *argument);
+void BaseLog_Task(void *argument);
+void BaseState_Task(void *argument);
 
 void MX_FREERTOS_Init(void); /* (MISRA C 2004 rule 8.1) */
 
@@ -135,11 +100,14 @@ void MX_FREERTOS_Init(void); /* (MISRA C 2004 rule 8.1) */
   */
 void MX_FREERTOS_Init(void) {
   /* USER CODE BEGIN Init */
-  Sensor_Init();
-  Temp_Init();
+  /*
+   * 基站业务模块初始化顺序：
+   *   1. 灯带和喷淋电机先初始化，确保 PWM 输出处于可控状态；
+   *   2. 状态机关闭所有执行器，建立待机/上电状态；
+   *   3. 日志和串口通信最后启动，便于打印后续运行状态。
+   */
+  ColorLight_Init();
   Motor_Init();
-  PumpValve_Init();
-  UV_Init();
   SystemMonitor_Init();
   Logging_Init();
   UART_Comm_Init();
@@ -163,29 +131,17 @@ void MX_FREERTOS_Init(void) {
   /* USER CODE END RTOS_QUEUES */
 
   /* Create the thread(s) */
-  /* creation of Task1 */
-  Task1Handle = osThreadNew(Sensor_Task, NULL, &Task1_attributes);
+  /* creation of BaseMotorTask */
+  BaseMotorTaskHandle = osThreadNew(BaseMotor_Task, NULL, &BaseMotorTask_attributes);
 
-  /* creation of Task2 */
-  Task2Handle = osThreadNew(Temp_Control_Task, NULL, &Task2_attributes);
+  /* creation of BaseCommTask */
+  BaseCommTaskHandle = osThreadNew(BaseComm_Task, NULL, &BaseCommTask_attributes);
 
-  /* creation of Task3 */
-  Task3Handle = osThreadNew(Motor_Task, NULL, &Task3_attributes);
+  /* creation of BaseLogTask */
+  BaseLogTaskHandle = osThreadNew(BaseLog_Task, NULL, &BaseLogTask_attributes);
 
-  /* creation of Task4 */
-  Task4Handle = osThreadNew(Pump_Valve_Task, NULL, &Task4_attributes);
-
-  /* creation of Task5 */
-  Task5Handle = osThreadNew(UV_Lamp_Task, NULL, &Task5_attributes);
-
-  /* creation of Task6 */
-  Task6Handle = osThreadNew(Communication_Task, NULL, &Task6_attributes);
-
-  /* creation of Task7 */
-  Task7Handle = osThreadNew(Logging_Task, NULL, &Task7_attributes);
-
-  /* creation of Task8 */
-  Task8Handle = osThreadNew(System_Monitor_Task, NULL, &Task8_attributes);
+  /* creation of BaseStateTask */
+  BaseStateTaskHandle = osThreadNew(BaseState_Task, NULL, &BaseStateTask_attributes);
 
   /* USER CODE BEGIN RTOS_THREADS */
   /* add threads, ... */
@@ -197,156 +153,80 @@ void MX_FREERTOS_Init(void) {
 
 }
 
-/* USER CODE BEGIN Header_Sensor_Task */
+/* USER CODE BEGIN Header_BaseMotor_Task */
 /**
-  * @brief  Function implementing the Task1 thread.
-  * @param  argument: Not used
-  * @retval None
-  */
-/* USER CODE END Header_Sensor_Task */
-void Sensor_Task(void *argument)
-{
-  /* USER CODE BEGIN Sensor_Task */
-  /* Infinite loop */
-  for(;;)
-  {
-    Sensor_TaskProcess();
-    osDelay(20);
-  }
-  /* USER CODE END Sensor_Task */
-}
-
-/* USER CODE BEGIN Header_Temp_Control_Task */
-/**
-* @brief Function implementing the Task2 thread.
+* @brief Function implementing the BaseMotorTask thread.
 * @param argument: Not used
 * @retval None
 */
-/* USER CODE END Header_Temp_Control_Task */
-void Temp_Control_Task(void *argument)
+/* USER CODE END Header_BaseMotor_Task */
+void BaseMotor_Task(void *argument)
 {
-  /* USER CODE BEGIN Temp_Control_Task */
-  /* Infinite loop */
-  for(;;)
-  {
-    Temp_Control_TaskProcess();
-    osDelay(100);
-  }
-  /* USER CODE END Temp_Control_Task */
-}
-
-/* USER CODE BEGIN Header_Motor_Task */
-/**
-* @brief Function implementing the Task3 thread.
-* @param argument: Not used
-* @retval None
-*/
-/* USER CODE END Header_Motor_Task */
-void Motor_Task(void *argument)
-{
-  /* USER CODE BEGIN Motor_Task */
-  /* Infinite loop */
+  /* USER CODE BEGIN BaseMotor_Task */
+  /* 喷淋电机周期任务，预留给 PWM 刷新、故障检测和后续自动换向逻辑。 */
   for(;;)
   {
     Motor_TaskProcess();
     osDelay(20);
   }
-  /* USER CODE END Motor_Task */
+  /* USER CODE END BaseMotor_Task */
 }
 
-/* USER CODE BEGIN Header_Pump_Valve_Task */
+/* USER CODE BEGIN Header_BaseComm_Task */
 /**
-* @brief Function implementing the Task4 thread.
+* @brief Function implementing the BaseCommTask thread.
 * @param argument: Not used
 * @retval None
 */
-/* USER CODE END Header_Pump_Valve_Task */
-void Pump_Valve_Task(void *argument)
+/* USER CODE END Header_BaseComm_Task */
+void BaseComm_Task(void *argument)
 {
-  /* USER CODE BEGIN Pump_Valve_Task */
-  /* Infinite loop */
-  for(;;)
-  {
-    PumpValve_TaskProcess();
-    osDelay(50);
-  }
-  /* USER CODE END Pump_Valve_Task */
-}
-
-/* USER CODE BEGIN Header_UV_Lamp_Task */
-/**
-* @brief Function implementing the Task5 thread.
-* @param argument: Not used
-* @retval None
-*/
-/* USER CODE END Header_UV_Lamp_Task */
-void UV_Lamp_Task(void *argument)
-{
-  /* USER CODE BEGIN UV_Lamp_Task */
-  /* Infinite loop */
-  for(;;)
-  {
-    UV_TaskProcess();
-    osDelay(500);
-  }
-  /* USER CODE END UV_Lamp_Task */
-}
-
-/* USER CODE BEGIN Header_Communication_Task */
-/**
-* @brief Function implementing the Task6 thread.
-* @param argument: Not used
-* @retval None
-*/
-/* USER CODE END Header_Communication_Task */
-void Communication_Task(void *argument)
-{
-  /* USER CODE BEGIN Communication_Task */
-  /* Infinite loop */
+  /* USER CODE BEGIN BaseComm_Task */
+  /* 桶体协议解析、液位接收和状态帧上报。 */
   for(;;)
   {
     UART_Comm_TaskProcess();
     osDelay(50);
   }
-  /* USER CODE END Communication_Task */
+  /* USER CODE END BaseComm_Task */
 }
 
-/* USER CODE BEGIN Header_Logging_Task */
+/* USER CODE BEGIN Header_BaseLog_Task */
 /**
-* @brief Function implementing the Task7 thread.
+* @brief Function implementing the BaseLogTask thread.
 * @param argument: Not used
 * @retval None
 */
-/* USER CODE END Header_Logging_Task */
-void Logging_Task(void *argument)
+/* USER CODE END Header_BaseLog_Task */
+void BaseLog_Task(void *argument)
 {
-  /* USER CODE BEGIN Logging_Task */
-  /* Infinite loop */
+  /* USER CODE BEGIN BaseLog_Task */
+  /* 周期性输出基站状态日志到 USART1。 */
   for(;;)
   {
     Logging_TaskProcess();
     osDelay(1000);
   }
-  /* USER CODE END Logging_Task */
+  /* USER CODE END BaseLog_Task */
 }
 
-/* USER CODE BEGIN Header_System_Monitor_Task */
+/* USER CODE BEGIN Header_BaseState_Task */
 /**
-* @brief Function implementing the Task8 thread.
+* @brief Function implementing the BaseStateTask thread.
 * @param argument: Not used
 * @retval None
 */
-/* USER CODE END Header_System_Monitor_Task */
-void System_Monitor_Task(void *argument)
+/* USER CODE END Header_BaseState_Task */
+void BaseState_Task(void *argument)
 {
-  /* USER CODE BEGIN System_Monitor_Task */
-  /* Infinite loop */
+  /* USER CODE BEGIN BaseState_Task */
+  /* 基站自动清洁/排水/喷淋/烘干状态机。 */
   for(;;)
   {
     SystemMonitor_TaskProcess();
     osDelay(50);
   }
-  /* USER CODE END System_Monitor_Task */
+  /* USER CODE END BaseState_Task */
 }
 
 /* Private application code --------------------------------------------------*/

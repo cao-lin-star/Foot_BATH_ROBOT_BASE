@@ -31,8 +31,6 @@ foot_bath_robot1\freertos.o: ../Drivers/STM32F1xx_HAL_Driver/Inc/stm32f1xx_hal_e
 foot_bath_robot1\freertos.o: ../Drivers/STM32F1xx_HAL_Driver/Inc/stm32f1xx_hal_dma.h
 foot_bath_robot1\freertos.o: ../Drivers/STM32F1xx_HAL_Driver/Inc/stm32f1xx_hal_dma_ex.h
 foot_bath_robot1\freertos.o: ../Drivers/STM32F1xx_HAL_Driver/Inc/stm32f1xx_hal_cortex.h
-foot_bath_robot1\freertos.o: ../Drivers/STM32F1xx_HAL_Driver/Inc/stm32f1xx_hal_adc.h
-foot_bath_robot1\freertos.o: ../Drivers/STM32F1xx_HAL_Driver/Inc/stm32f1xx_hal_adc_ex.h
 foot_bath_robot1\freertos.o: ../Drivers/STM32F1xx_HAL_Driver/Inc/stm32f1xx_hal_flash.h
 foot_bath_robot1\freertos.o: ../Drivers/STM32F1xx_HAL_Driver/Inc/stm32f1xx_hal_flash_ex.h
 foot_bath_robot1\freertos.o: ../Drivers/STM32F1xx_HAL_Driver/Inc/stm32f1xx_hal_pwr.h
@@ -41,11 +39,8 @@ foot_bath_robot1\freertos.o: ../Drivers/STM32F1xx_HAL_Driver/Inc/stm32f1xx_hal_t
 foot_bath_robot1\freertos.o: ../Drivers/STM32F1xx_HAL_Driver/Inc/stm32f1xx_hal_uart.h
 foot_bath_robot1\freertos.o: ../Middlewares/Third_Party/FreeRTOS/Source/CMSIS_RTOS_V2/cmsis_os.h
 foot_bath_robot1\freertos.o: ../Middlewares/Third_Party/FreeRTOS/Source/CMSIS_RTOS_V2/cmsis_os2.h
-foot_bath_robot1\freertos.o: ../Hardware/sensor.h
-foot_bath_robot1\freertos.o: ../Hardware/temp_control.h
+foot_bath_robot1\freertos.o: ../Hardware/color_light.h
 foot_bath_robot1\freertos.o: ../Hardware/motor_control.h
-foot_bath_robot1\freertos.o: ../Hardware/pump_valve.h
-foot_bath_robot1\freertos.o: ../Hardware/uv_lamp.h
 foot_bath_robot1\freertos.o: ../Hardware/uart_comm.h
 foot_bath_robot1\freertos.o: ../Hardware/log.h
 foot_bath_robot1\freertos.o: ../Hardware/system_monitor.h

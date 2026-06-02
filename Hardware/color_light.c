@@ -1,12 +1,14 @@
 #include "color_light.h"
 #include "tim.h"
 
+/* RGBW 当前亮度缓存，单位为百分比 0-100。 */
 static uint8_t color_light_r;
 static uint8_t color_light_g;
 static uint8_t color_light_b;
 static uint8_t color_light_w;
 static uint8_t color_light_initialized;
 
+/* 保护 PWM 占空比范围，避免上层传入超过 100 的亮度值。 */
 static uint8_t ColorLight_ClampValue(uint8_t value)
 {
   if (value > 100U)
@@ -18,6 +20,7 @@ static uint8_t ColorLight_ClampValue(uint8_t value)
 
 static uint32_t ColorLight_DutyToPulse(uint8_t duty_percent)
 {
+  /* 根据 TIM4 的 Period 将百分比亮度转换为 CCR 值。 */
   uint32_t period;
   uint32_t pulse;
 
@@ -42,14 +45,22 @@ static void ColorLight_Apply(void)
     return;
   }
 
-  ColorLight_SetTimerChannel(TIM_CHANNEL_1, color_light_r);
-  ColorLight_SetTimerChannel(TIM_CHANNEL_2, color_light_g);
-  ColorLight_SetTimerChannel(TIM_CHANNEL_3, color_light_b);
-  ColorLight_SetTimerChannel(TIM_CHANNEL_4, color_light_w);
+  /*
+   * 原理图通道与颜色不是 R/G/B/W 顺序：
+   *   PB6 TIM4_CH1 = LED_W
+   *   PB7 TIM4_CH2 = LED_B
+   *   PB8 TIM4_CH3 = LED_G
+   *   PB9 TIM4_CH4 = LED_R
+   */
+  ColorLight_SetTimerChannel(TIM_CHANNEL_1, color_light_w);
+  ColorLight_SetTimerChannel(TIM_CHANNEL_2, color_light_b);
+  ColorLight_SetTimerChannel(TIM_CHANNEL_3, color_light_g);
+  ColorLight_SetTimerChannel(TIM_CHANNEL_4, color_light_r);
 }
 
 void ColorLight_Init(void)
 {
+  /* 启动 TIM4 四路 PWM。亮度缓存默认为 0，因此初始化后灯带保持关闭。 */
   color_light_initialized = 1U;
 
   HAL_TIM_PWM_Start(&htim4, TIM_CHANNEL_1);

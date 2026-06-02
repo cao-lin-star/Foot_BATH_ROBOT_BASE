@@ -39,6 +39,15 @@ extern UART_HandleTypeDef huart2;
 extern UART_HandleTypeDef huart3;
 
 /* USER CODE BEGIN Private defines */
+/*
+ * 基站串口用途映射：
+ *   LOG_UART_HANDLE    = USART1，LinuxTX1/LinuxRX1，日志打印口
+ *   LEVEL_UART_HANDLE  = USART2，JZ_TX1/JZ_RX1，液位传感器通信口
+ *   BUCKET_UART_HANDLE = USART3，LOG_TX1/LOG_RX1，桶体通信口
+ */
+#define LOG_UART_HANDLE        huart1
+#define LEVEL_UART_HANDLE      huart2
+#define BUCKET_UART_HANDLE     huart3
 
 /* USER CODE END Private defines */
 

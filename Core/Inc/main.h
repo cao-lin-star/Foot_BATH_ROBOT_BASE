@@ -57,50 +57,63 @@ void Error_Handler(void);
 /* USER CODE END EFP */
 
 /* Private defines -----------------------------------------------------------*/
+/*
+ * 基站 GPIO/外设引脚定义。
+ * 命名优先使用原理图网络名或业务含义：
+ *   LinuxRX1/LinuxTX1 -> USART1 日志串口
+ *   LOG_RX1/LOG_TX1   -> USART3 桶体通信串口
+ *   JZ_TX1/JZ_RX1     -> USART2 液位传感器串口
+ */
+#define DRY_FAN_Pin GPIO_PIN_0
+#define DRY_FAN_GPIO_Port GPIOA
 #define EN_HEAT_Pin GPIO_PIN_1
 #define EN_HEAT_GPIO_Port GPIOA
-#define MCU_TX_Pin GPIO_PIN_2
-#define MCU_TX_GPIO_Port GPIOA
-#define MCU_RX_Pin GPIO_PIN_3
-#define MCU_RX_GPIO_Port GPIOA
-#define AD_DCIN_Pin GPIO_PIN_4
-#define AD_DCIN_GPIO_Port GPIOA
-#define AD_BAT_V_Pin GPIO_PIN_5
-#define AD_BAT_V_GPIO_Port GPIOA
-#define W_LEVEL_Pin GPIO_PIN_6
-#define W_LEVEL_GPIO_Port GPIOA
-#define AD_NTC_Pin GPIO_PIN_7
-#define AD_NTC_GPIO_Port GPIOA
-#define AD_PUMP_I_Pin GPIO_PIN_0
-#define AD_PUMP_I_GPIO_Port GPIOB
-#define AD_MOTOR_I_Pin GPIO_PIN_1
-#define AD_MOTOR_I_GPIO_Port GPIOB
-#define Log_TX_Pin GPIO_PIN_10
-#define Log_TX_GPIO_Port GPIOB
-#define Log_RX_Pin GPIO_PIN_11
-#define Log_RX_GPIO_Port GPIOB
-#define DCIN_ON_Pin GPIO_PIN_12
-#define DCIN_ON_GPIO_Port GPIOB
-#define Linux_TX_Pin GPIO_PIN_9
-#define Linux_TX_GPIO_Port GPIOA
-#define Linux_RX_Pin GPIO_PIN_10
-#define Linux_RX_GPIO_Port GPIOA
-#define EN_PUMP_Pin GPIO_PIN_15
-#define EN_PUMP_GPIO_Port GPIOA
-#define EN_NTC_Pin GPIO_PIN_3
-#define EN_NTC_GPIO_Port GPIOB
-#define EN_TWV_Pin GPIO_PIN_4
-#define EN_TWV_GPIO_Port GPIOB
-#define EN_UV_Pin GPIO_PIN_5
-#define EN_UV_GPIO_Port GPIOB
-#define LED_R_Pin GPIO_PIN_6
-#define LED_R_GPIO_Port GPIOB
-#define LED_G_Pin GPIO_PIN_7
-#define LED_G_GPIO_Port GPIOB
-#define LED_B_Pin GPIO_PIN_8
-#define LED_B_GPIO_Port GPIOB
-#define LED_W_Pin GPIO_PIN_9
+#define JZ_TX1_Pin GPIO_PIN_2
+#define JZ_TX1_GPIO_Port GPIOA
+#define JZ_RX1_Pin GPIO_PIN_3
+#define JZ_RX1_GPIO_Port GPIOA
+#define STP_MS_Pin GPIO_PIN_7
+#define STP_MS_GPIO_Port GPIOA
+#define PWM_A_Pin GPIO_PIN_8
+#define PWM_A_GPIO_Port GPIOA
+#define LinuxRX1_Pin GPIO_PIN_9
+#define LinuxRX1_GPIO_Port GPIOA
+#define LinuxTX1_Pin GPIO_PIN_10
+#define LinuxTX1_GPIO_Port GPIOA
+#define PWM_B_Pin GPIO_PIN_11
+#define PWM_B_GPIO_Port GPIOA
+#define RESERVED_Pin GPIO_PIN_15
+#define RESERVED_GPIO_Port GPIOA
+#define DIR_MS_Pin GPIO_PIN_0
+#define DIR_MS_GPIO_Port GPIOB
+#define ENABLE_MS_Pin GPIO_PIN_1
+#define ENABLE_MS_GPIO_Port GPIOB
+#define EN_IR_Pin GPIO_PIN_3
+#define EN_IR_GPIO_Port GPIOB
+#define WATER_OUT_Pin GPIO_PIN_4
+#define WATER_OUT_GPIO_Port GPIOB
+#define WATER_IN_Pin GPIO_PIN_5
+#define WATER_IN_GPIO_Port GPIOB
+#define LED_W_Pin GPIO_PIN_6
 #define LED_W_GPIO_Port GPIOB
+#define LED_B_Pin GPIO_PIN_7
+#define LED_B_GPIO_Port GPIOB
+#define LED_G_Pin GPIO_PIN_8
+#define LED_G_GPIO_Port GPIOB
+#define LED_R_Pin GPIO_PIN_9
+#define LED_R_GPIO_Port GPIOB
+#define LOG_RX1_Pin GPIO_PIN_10
+#define LOG_RX1_GPIO_Port GPIOB
+#define LOG_TX1_Pin GPIO_PIN_11
+#define LOG_TX1_GPIO_Port GPIOB
+#define MED_PUMP1_Pin GPIO_PIN_12
+#define MED_PUMP1_GPIO_Port GPIOB
+#define MED_PUMP2_Pin GPIO_PIN_13
+#define MED_PUMP2_GPIO_Port GPIOB
+#define CLEAN_PUMP_Pin GPIO_PIN_14
+#define CLEAN_PUMP_GPIO_Port GPIOB
+#define SPARE_SW_Pin GPIO_PIN_15
+#define SPARE_SW_GPIO_Port GPIOB
 
 /* USER CODE BEGIN Private defines */
 

@@ -22,8 +22,6 @@ foot_bath_robot1\system_monitor.o: ../Drivers/STM32F1xx_HAL_Driver/Inc/stm32f1xx
 foot_bath_robot1\system_monitor.o: ../Drivers/STM32F1xx_HAL_Driver/Inc/stm32f1xx_hal_dma.h
 foot_bath_robot1\system_monitor.o: ../Drivers/STM32F1xx_HAL_Driver/Inc/stm32f1xx_hal_dma_ex.h
 foot_bath_robot1\system_monitor.o: ../Drivers/STM32F1xx_HAL_Driver/Inc/stm32f1xx_hal_cortex.h
-foot_bath_robot1\system_monitor.o: ../Drivers/STM32F1xx_HAL_Driver/Inc/stm32f1xx_hal_adc.h
-foot_bath_robot1\system_monitor.o: ../Drivers/STM32F1xx_HAL_Driver/Inc/stm32f1xx_hal_adc_ex.h
 foot_bath_robot1\system_monitor.o: ../Drivers/STM32F1xx_HAL_Driver/Inc/stm32f1xx_hal_flash.h
 foot_bath_robot1\system_monitor.o: ../Drivers/STM32F1xx_HAL_Driver/Inc/stm32f1xx_hal_flash_ex.h
 foot_bath_robot1\system_monitor.o: ../Drivers/STM32F1xx_HAL_Driver/Inc/stm32f1xx_hal_pwr.h
@@ -41,8 +39,8 @@ foot_bath_robot1\system_monitor.o: ../Middlewares/Third_Party/FreeRTOS/Source/in
 foot_bath_robot1\system_monitor.o: ../Middlewares/Third_Party/FreeRTOS/Source/include/task.h
 foot_bath_robot1\system_monitor.o: ../Middlewares/Third_Party/FreeRTOS/Source/include/list.h
 foot_bath_robot1\system_monitor.o: ../Middlewares/Third_Party/FreeRTOS/Source/CMSIS_RTOS_V2/cmsis_os2.h
+foot_bath_robot1\system_monitor.o: ..\Hardware\color_light.h
+foot_bath_robot1\system_monitor.o: ..\Hardware\log.h
+foot_bath_robot1\system_monitor.o: ../Core/Inc/main.h
 foot_bath_robot1\system_monitor.o: ..\Hardware\motor_control.h
-foot_bath_robot1\system_monitor.o: ..\Hardware\pump_valve.h
-foot_bath_robot1\system_monitor.o: ..\Hardware\sensor.h
-foot_bath_robot1\system_monitor.o: ..\Hardware\temp_control.h
-foot_bath_robot1\system_monitor.o: ..\Hardware\uv_lamp.h
+foot_bath_robot1\system_monitor.o: C:\Keil_v5\ARM\ARMCC\Bin\..\include\string.h

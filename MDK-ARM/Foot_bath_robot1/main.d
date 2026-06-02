@@ -22,8 +22,6 @@ foot_bath_robot1\main.o: ../Drivers/STM32F1xx_HAL_Driver/Inc/stm32f1xx_hal_exti.
 foot_bath_robot1\main.o: ../Drivers/STM32F1xx_HAL_Driver/Inc/stm32f1xx_hal_dma.h
 foot_bath_robot1\main.o: ../Drivers/STM32F1xx_HAL_Driver/Inc/stm32f1xx_hal_dma_ex.h
 foot_bath_robot1\main.o: ../Drivers/STM32F1xx_HAL_Driver/Inc/stm32f1xx_hal_cortex.h
-foot_bath_robot1\main.o: ../Drivers/STM32F1xx_HAL_Driver/Inc/stm32f1xx_hal_adc.h
-foot_bath_robot1\main.o: ../Drivers/STM32F1xx_HAL_Driver/Inc/stm32f1xx_hal_adc_ex.h
 foot_bath_robot1\main.o: ../Drivers/STM32F1xx_HAL_Driver/Inc/stm32f1xx_hal_flash.h
 foot_bath_robot1\main.o: ../Drivers/STM32F1xx_HAL_Driver/Inc/stm32f1xx_hal_flash_ex.h
 foot_bath_robot1\main.o: ../Drivers/STM32F1xx_HAL_Driver/Inc/stm32f1xx_hal_pwr.h
@@ -41,7 +39,6 @@ foot_bath_robot1\main.o: ../Middlewares/Third_Party/FreeRTOS/Source/include/mpu_
 foot_bath_robot1\main.o: ../Middlewares/Third_Party/FreeRTOS/Source/include/task.h
 foot_bath_robot1\main.o: ../Middlewares/Third_Party/FreeRTOS/Source/include/list.h
 foot_bath_robot1\main.o: ../Middlewares/Third_Party/FreeRTOS/Source/CMSIS_RTOS_V2/cmsis_os2.h
-foot_bath_robot1\main.o: ../Core/Inc/adc.h
 foot_bath_robot1\main.o: ../Core/Inc/dma.h
 foot_bath_robot1\main.o: ../Core/Inc/tim.h
 foot_bath_robot1\main.o: ../Core/Inc/usart.h

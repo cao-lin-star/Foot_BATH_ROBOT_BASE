@@ -1,277 +1,536 @@
 #include "system_monitor.h"
+#include "color_light.h"
+#include "log.h"
+#include "main.h"
 #include "motor_control.h"
-#include "pump_valve.h"
-#include "sensor.h"
-#include "temp_control.h"
-#include "uv_lamp.h"
+#include <string.h>
 
-//低电压阈值：20.0V（低于则报警）
-#ifndef SYSTEM_BAT_LOW_DV 
-#define SYSTEM_BAT_LOW_DV            200U
-#endif
+#define BASE_CMD_OFF              0xB0U
+#define BASE_CMD_STANDBY          0xB1U
+#define BASE_CMD_AUTO_CLEAN       0xB3U
+#define BASE_CMD_FORCE_DRAIN      0xB4U
+#define BASE_CMD_CLEAN_SPRAY      0xB5U
+#define BASE_CMD_CLEAR_SPRAY      0xB6U
+#define BASE_CMD_DRY              0xB7U
+#define BASE_CMD_SELF_CHECK       0xB8U
 
-//高电压阈值：26.0V（高于则报警）
-#ifndef SYSTEM_BAT_HIGH_DV
-#define SYSTEM_BAT_HIGH_DV           260U
-#endif
+#define BASE_DEFAULT_DRAIN_MS     (60UL * 1000UL)
+#define BASE_WATER_READY_LEVEL    1U
 
-static uint8_t system_main_status;    //系统主状态，0=上电 1=待机 2=运行 3=错误
-static uint8_t system_sub_status;     //系统子状态，预留给不同主状态下的细分状态使用，具体定义由上层应用决定
-static uint8_t system_err1;           //错误码1（水位、传感器、超温）
-static uint8_t system_err2;           //错误码2（加热、水泵、电机、UV、电池）
-static uint8_t system_last_cmd;       //保存最后一次接收的指令
-static uint8_t system_link_status;    //通信连接状态
-static uint8_t system_reset_requested;  //系统复位请求标志
-static uint32_t system_reset_tick;      //复位请求时间
-static uint32_t system_timer_deadline_tick;   //定时关机截止时间
-
-//把指令里的时间编码（1~6）转换成对应的定时毫秒（10/15/20/25/30分钟）
-static uint32_t SystemMonitor_TimerCodeToMs(uint8_t timer_code)
+/*
+ * 内部动作状态。
+ * 这些状态比协议上报的 sub_status 更细，用来精确推进自动清洁流程。
+ */
+typedef enum
 {
-  switch (timer_code)
+  BASE_ACTION_IDLE = 0,
+  BASE_ACTION_AUTO_DRAIN1,
+  BASE_ACTION_AUTO_HOT_SPRAY1,
+  BASE_ACTION_AUTO_CLEAN_SPRAY,
+  BASE_ACTION_AUTO_DRAIN2,
+  BASE_ACTION_AUTO_HOT_SPRAY2,
+  BASE_ACTION_AUTO_DRAIN3,
+  BASE_ACTION_AUTO_DRY,
+  BASE_ACTION_FORCE_DRAIN,
+  BASE_ACTION_SINGLE_CLEAN_SPRAY,
+  BASE_ACTION_SINGLE_CLEAR_SPRAY,
+  BASE_ACTION_SINGLE_DRY
+} BaseAction_t;
+
+static uint8_t base_main_status;
+static uint8_t base_sub_status;
+static uint8_t base_err1;
+static uint8_t base_err2;
+static uint8_t base_last_cmd;
+static uint8_t base_link_status;
+static uint8_t base_reset_requested;
+static uint32_t base_reset_tick;
+static uint32_t base_action_deadline;
+static uint8_t base_clean_spray_min;
+static uint8_t base_clear_spray_min;
+static uint8_t base_dry_code;
+static BaseAction_t base_action;
+static uint8_t bucket_connected;
+static uint8_t bucket_circulation_requested;
+static uint8_t level_sensor_value;
+
+static uint32_t Base_MinToMs(uint8_t minutes)
+{
+  /* 协议中的喷淋时间按分钟下发。 */
+  return (uint32_t)minutes * 60UL * 1000UL;
+}
+
+static uint32_t Base_DryCodeToMs(uint8_t code)
+{
+  /* 协议规定烘干时间 1-9 表示 code * 10 分钟。 */
+  if (code > 9U)
   {
-    case 1U:
-      return 10UL * 60UL * 1000UL;
-    case 2U:
-      return 15UL * 60UL * 1000UL;
-    case 3U:
-      return 20UL * 60UL * 1000UL;
-    case 4U:
-      return 25UL * 60UL * 1000UL;
-    case 5U:
-    case 6U:
-      return 30UL * 60UL * 1000UL;
+    code = 9U;
+  }
+  return (uint32_t)code * 10UL * 60UL * 1000UL;
+}
+
+static void Base_SetOutput(GPIO_TypeDef *port, uint16_t pin, uint8_t on)
+{
+  HAL_GPIO_WritePin(port, pin, (on != 0U) ? GPIO_PIN_SET : GPIO_PIN_RESET);
+}
+
+static void Base_AllOutputsOff(void)
+{
+  /*
+   * 基站总停止函数。
+   * 所有关机、待机、异常退出都从这里收口，避免某个输出遗漏关闭。
+   */
+  Base_SetOutput(EN_HEAT_GPIO_Port, EN_HEAT_Pin, 0U);
+  Base_SetOutput(DRY_FAN_GPIO_Port, DRY_FAN_Pin, 0U);
+  Base_SetOutput(WATER_IN_GPIO_Port, WATER_IN_Pin, 0U);
+  Base_SetOutput(WATER_OUT_GPIO_Port, WATER_OUT_Pin, 0U);
+  Base_SetOutput(EN_IR_GPIO_Port, EN_IR_Pin, 0U);
+  Base_SetOutput(MED_PUMP1_GPIO_Port, MED_PUMP1_Pin, 0U);
+  Base_SetOutput(MED_PUMP2_GPIO_Port, MED_PUMP2_Pin, 0U);
+  Base_SetOutput(CLEAN_PUMP_GPIO_Port, CLEAN_PUMP_Pin, 0U);
+  Base_SetOutput(SPARE_SW_GPIO_Port, SPARE_SW_Pin, 0U);
+  Motor_Stop();
+  ColorLight_Off();
+  bucket_circulation_requested = 0U;
+}
+
+static void Base_StartTimedAction(BaseAction_t action, uint8_t sub_status, uint32_t duration_ms)
+{
+  /*
+   * 启动一个带超时时间的动作。
+   * 使用有符号差值比较 HAL_GetTick()，可以兼容 tick 溢出。
+   */
+  base_action = action;
+  base_main_status = BASE_STATUS_RUNNING;
+  base_sub_status = sub_status;
+  base_action_deadline = HAL_GetTick() + duration_ms;
+}
+
+static void Base_ApplyDrain(void)
+{
+  /* 排水阶段：关闭进水/加热/喷淋/清洁液，打开 WATER_OUT。 */
+  Base_SetOutput(WATER_IN_GPIO_Port, WATER_IN_Pin, 0U);
+  Base_SetOutput(EN_HEAT_GPIO_Port, EN_HEAT_Pin, 0U);
+  Base_SetOutput(CLEAN_PUMP_GPIO_Port, CLEAN_PUMP_Pin, 0U);
+  Motor_Stop();
+  Base_SetOutput(WATER_OUT_GPIO_Port, WATER_OUT_Pin, 1U);
+  bucket_circulation_requested = 0U;
+  ColorLight_SetRgbw(0U, 0U, 60U, 0U);
+}
+
+static void Base_ApplyHotSpray(uint8_t with_cleaner)
+{
+  /*
+   * 热水喷淋阶段：
+   *   WATER_IN 打开；
+   *   EN_HEAT 打开；
+   *   喷淋电机 70% 运行；
+   *   with_cleaner=1 时同步打开清洁液泵。
+   */
+  Base_SetOutput(WATER_OUT_GPIO_Port, WATER_OUT_Pin, 0U);
+  Base_SetOutput(WATER_IN_GPIO_Port, WATER_IN_Pin, 1U);
+  Base_SetOutput(EN_HEAT_GPIO_Port, EN_HEAT_Pin, 1U);
+  Base_SetOutput(CLEAN_PUMP_GPIO_Port, CLEAN_PUMP_Pin, with_cleaner);
+  Motor_Run(70U, 0U);
+  ColorLight_SetRgbw(80U, 40U, 0U, 0U);
+}
+
+static void Base_ApplyDry(void)
+{
+  /* 烘干阶段：关闭水路和喷淋电机，打开风机。 */
+  Base_SetOutput(WATER_IN_GPIO_Port, WATER_IN_Pin, 0U);
+  Base_SetOutput(WATER_OUT_GPIO_Port, WATER_OUT_Pin, 0U);
+  Base_SetOutput(EN_HEAT_GPIO_Port, EN_HEAT_Pin, 0U);
+  Base_SetOutput(CLEAN_PUMP_GPIO_Port, CLEAN_PUMP_Pin, 0U);
+  Motor_Stop();
+  Base_SetOutput(DRY_FAN_GPIO_Port, DRY_FAN_Pin, 1U);
+  bucket_circulation_requested = 0U;
+  ColorLight_SetRgbw(70U, 20U, 0U, 20U);
+}
+
+static void Base_FinishToStandby(void)
+{
+  /* 动作正常结束或被待机命令打断后，统一回到待机状态。 */
+  Base_AllOutputsOff();
+  base_action = BASE_ACTION_IDLE;
+  base_action_deadline = 0UL;
+  base_main_status = BASE_STATUS_STANDBY;
+  base_sub_status = BASE_SUB_IDLE;
+}
+
+static void Base_AdvanceAutoClean(void)
+{
+  /*
+   * 自动清洁流程推进。
+   * 用户给定步骤为 1、2、3、5、6、7、8，编号 4 按需求跳过。
+   *
+   * 1 排水
+   * 2 热水喷淋
+   * 3 清洁液喷淋，同时请求桶体水泵内循环
+   * 5 关闭喷淋/内循环，开启排水
+   * 6 热水喷淋，到达水位后请求桶体水泵内循环
+   * 7 排水
+   * 8 烘干
+   */
+  switch (base_action)
+  {
+    case BASE_ACTION_AUTO_DRAIN1:
+      Base_ApplyHotSpray(0U);
+      Base_StartTimedAction(BASE_ACTION_AUTO_HOT_SPRAY1, BASE_SUB_CLEAR_SPRAY, Base_MinToMs(base_clear_spray_min));
+      break;
+
+    case BASE_ACTION_AUTO_HOT_SPRAY1:
+      Base_ApplyHotSpray(1U);
+      /* 通信层会把该请求写入状态帧，桶体收到后开启水泵内循环。 */
+      bucket_circulation_requested = 1U;
+      Base_StartTimedAction(BASE_ACTION_AUTO_CLEAN_SPRAY, BASE_SUB_CLEAN_SPRAY, Base_MinToMs(base_clean_spray_min));
+      break;
+
+    case BASE_ACTION_AUTO_CLEAN_SPRAY:
+      Base_ApplyDrain();
+      Base_StartTimedAction(BASE_ACTION_AUTO_DRAIN2, BASE_SUB_CLEAN_DRAIN1, BASE_DEFAULT_DRAIN_MS);
+      break;
+
+    case BASE_ACTION_AUTO_DRAIN2:
+      Base_ApplyHotSpray(0U);
+      Base_StartTimedAction(BASE_ACTION_AUTO_HOT_SPRAY2, BASE_SUB_CLEAR_SPRAY, Base_MinToMs(base_clear_spray_min));
+      break;
+
+    case BASE_ACTION_AUTO_HOT_SPRAY2:
+      Base_ApplyDrain();
+      Base_StartTimedAction(BASE_ACTION_AUTO_DRAIN3, BASE_SUB_CLEAN_DRAIN2, BASE_DEFAULT_DRAIN_MS);
+      break;
+
+    case BASE_ACTION_AUTO_DRAIN3:
+      Base_ApplyDry();
+      Base_StartTimedAction(BASE_ACTION_AUTO_DRY, BASE_SUB_DRY, Base_DryCodeToMs(base_dry_code));
+      break;
+
+    case BASE_ACTION_AUTO_DRY:
+      Base_FinishToStandby();
+      break;
+
     default:
-      return 0UL;
+      Base_FinishToStandby();
+      break;
   }
 }
 
-//系统监控初始化
+static void Base_StartAutoClean(void)
+{
+  Base_ApplyDrain();
+  Base_StartTimedAction(BASE_ACTION_AUTO_DRAIN1, BASE_SUB_CLEAN_DRAIN1, BASE_DEFAULT_DRAIN_MS);
+}
+
 void SystemMonitor_Init(void)
 {
-  system_main_status = BUCKET_STATUS_POWER_ON;  //初始状态：开机
-  system_sub_status = 0U;                       //子状态清空
-  system_err1 = 0U;                             //错误码1清空
-  system_err2 = 0U;                             //错误码2清空
-  system_last_cmd = 0xA1U;                      //默认指令
-  system_link_status = 0U;                      //通信断开
-  system_reset_requested = 0U;                  //无复位请求
-  system_reset_tick = 0UL;                      //复位时间清空
-  system_timer_deadline_tick = 0UL;             // 定时关机时间清空
+  base_main_status = BASE_STATUS_POWER_ON;
+  base_sub_status = BASE_SUB_IDLE;
+  base_err1 = 0U;
+  base_err2 = 0U;
+  base_last_cmd = BASE_CMD_STANDBY;
+  base_link_status = 0U;
+  base_reset_requested = 0U;
+  base_reset_tick = 0UL;
+  base_action_deadline = 0UL;
+  base_clean_spray_min = 0U;
+  base_clear_spray_min = 0U;
+  base_dry_code = 0U;
+  base_action = BASE_ACTION_IDLE;
+  bucket_connected = 0U;
+  bucket_circulation_requested = 0U;
+  level_sensor_value = 0U;
+  Base_AllOutputsOff();
 }
 
-//关闭加热、电机、水泵、UV灯
-void SystemMonitor_StopAllOutputs(void)
-{
-  Temp_Enable(0U);
-  Motor_Stop();
-  PumpValve_SetMode(PUMP_VALVE_MODE_OFF);
-  UV_Off();
-}
-
-//设置系统主状态 + 子状态
-void SystemMonitor_SetMainStatus(uint8_t main_status, uint8_t sub_status)
-{
-  system_main_status = main_status;
-  system_sub_status = sub_status;
-}
-
-//获取状态接口
-uint8_t SystemMonitor_GetMainStatus(void)
-{
-  return system_main_status;
-}
-
-//获取状态接口
-uint8_t SystemMonitor_GetSubStatus(void)
-{
-  return system_sub_status;
-}
-
-//获取错误码1接口（最高位屏蔽）
-uint8_t SystemMonitor_GetErrCode1(void)
-{
-  return system_err1 & 0x7FU;
-}
-
-//获取错误码2接口（最高位屏蔽）
-uint8_t SystemMonitor_GetErrCode2(void)
-{
-  return system_err2 & 0x7FU;
-}
-
-//指令存储接口
-void SystemMonitor_SetCommand(uint8_t cmd)
-{
-  system_last_cmd = cmd;
-}
-
-//指令存储接口
-uint8_t SystemMonitor_GetCommand(void)
-{
-  return system_last_cmd;
-}
-
-//通信连接状态
-void SystemMonitor_SetLinkStatus(uint8_t link_status)
-{
-  system_link_status = (link_status != 0U) ? 1U : 0U;
-}
-
-//通信连接状态
-uint8_t SystemMonitor_GetLinkStatus(void)
-{
-  return system_link_status;
-}
-
-//设置定时关机
-void SystemMonitor_SetBathTimer(uint8_t timer_code)
-{
-  uint32_t duration_ms;
-
-  duration_ms = SystemMonitor_TimerCodeToMs(timer_code);
-  if (duration_ms == 0UL)
-  {
-    system_timer_deadline_tick = 0UL;
-  }
-  else
-  {
-    system_timer_deadline_tick = HAL_GetTick() + duration_ms;
-  }
-}
-
-//获取剩余时间（分钟）
-uint8_t SystemMonitor_GetTimerRemainingMin(void)
+void SystemMonitor_TaskProcess(void)
 {
   uint32_t now;
-  uint32_t remaining_ms;
-
-  if (system_timer_deadline_tick == 0UL)
-  {
-    return 0U;
-  }
 
   now = HAL_GetTick();
-  if ((int32_t)(system_timer_deadline_tick - now) <= 0)
+  base_err1 = 0U;
+  base_err2 = 0U;
+
+  /* 当前动作到期后，自动清洁进入下一阶段；单项动作直接结束待机。 */
+  if ((base_action_deadline != 0UL) && ((int32_t)(now - base_action_deadline) >= 0))
+  {
+    if ((base_action >= BASE_ACTION_AUTO_DRAIN1) && (base_action <= BASE_ACTION_AUTO_DRY))
+    {
+      Base_AdvanceAutoClean();
+    }
+    else
+    {
+      Base_FinishToStandby();
+    }
+  }
+
+  /*
+   * 自动清洁第 6 步：热水喷淋达到设定液位后，才请求桶体开启内循环。
+   * 当前液位协议先按单字节缓存，后续接入完整液位帧时只需改 UART 层解析。
+   */
+  if ((base_action == BASE_ACTION_AUTO_HOT_SPRAY2) && (level_sensor_value >= BASE_WATER_READY_LEVEL))
+  {
+    bucket_circulation_requested = 1U;
+  }
+
+  if ((base_reset_requested != 0U) && ((now - base_reset_tick) > 200UL))
+  {
+    NVIC_SystemReset();
+  }
+}
+
+void SystemMonitor_StopAllOutputs(void)
+{
+  Base_FinishToStandby();
+}
+
+void SystemMonitor_SetMainStatus(uint8_t main_status, uint8_t sub_status)
+{
+  base_main_status = main_status;
+  base_sub_status = sub_status;
+}
+
+uint8_t SystemMonitor_GetMainStatus(void)
+{
+  return base_main_status;
+}
+
+uint8_t SystemMonitor_GetSubStatus(void)
+{
+  return base_sub_status;
+}
+
+uint8_t SystemMonitor_GetErrCode1(void)
+{
+  return base_err1 & 0x7FU;
+}
+
+uint8_t SystemMonitor_GetErrCode2(void)
+{
+  return base_err2 & 0x7FU;
+}
+
+void SystemMonitor_SetCommand(uint8_t cmd)
+{
+  base_last_cmd = cmd;
+}
+
+uint8_t SystemMonitor_GetCommand(void)
+{
+  return base_last_cmd;
+}
+
+void SystemMonitor_SetLinkStatus(uint8_t link_status)
+{
+  base_link_status = (link_status != 0U) ? 1U : 0U;
+}
+
+uint8_t SystemMonitor_GetLinkStatus(void)
+{
+  return base_link_status;
+}
+
+void SystemMonitor_SetBathTimer(uint8_t timer_code)
+{
+  (void)timer_code;
+}
+
+uint8_t SystemMonitor_GetTimerRemainingMin(void)
+{
+  uint32_t remaining_ms;
+
+  if ((base_action_deadline == 0UL) || ((int32_t)(base_action_deadline - HAL_GetTick()) <= 0))
   {
     return 0U;
   }
-
-  remaining_ms = system_timer_deadline_tick - now;
+  remaining_ms = base_action_deadline - HAL_GetTick();
   return (uint8_t)((remaining_ms + 59999UL) / 60000UL);
 }
 
-//请求系统复位
+uint32_t SystemMonitor_GetTimerRemainingSec(void)
+{
+  if ((base_action_deadline == 0UL) || ((int32_t)(base_action_deadline - HAL_GetTick()) <= 0))
+  {
+    return 0UL;
+  }
+  return (base_action_deadline - HAL_GetTick() + 999UL) / 1000UL;
+}
+
 void SystemMonitor_RequestReset(void)
 {
-  system_reset_requested = 1U;
-  system_reset_tick = HAL_GetTick();
+  base_reset_requested = 1U;
+  base_reset_tick = HAL_GetTick();
 }
 
-//查询是否请求复位
 uint8_t SystemMonitor_IsResetRequested(void)
 {
-  return system_reset_requested;
+  return base_reset_requested;
 }
 
-//清除所有故障
 void SystemMonitor_ClearErrors(void)
 {
-  system_err1 = 0U;
-  system_err2 = 0U;
-  Temp_ClearFault();
-  Motor_ClearFault();
-  PumpValve_ClearFault();
-  UV_ClearFault();
+  base_err1 = 0U;
+  base_err2 = 0U;
 }
 
-//系统监控核心任务（周期调用）
-void SystemMonitor_TaskProcess(void)
+void Base_SetBucketConnected(uint8_t connected)
 {
-  uint16_t battery_dv;      //电池电压（分厘伏）
-  uint8_t water_level;      //水位（协议值）
-  uint8_t active_needs_water;     //当前活动是否需要水（加热/循环/UV）
+  uint8_t was_connected;
 
-  //每次调用先清除之前的错误码，再根据当前传感器状态和执行部件状态重新计算错误码
-  system_err1 = 0U;
-  system_err2 = 0U;
-
-  //读取当前水位和活动状态
-  water_level = Sensor_GetWaterLevelProtocol();
-
-  //判断当前是否有需要水的活动正在运行（加热/循环/UV），如果有但水位过低则报缺水故障
-  active_needs_water = ((Temp_IsEnabled() != 0U) ||
-                        (PumpValve_GetMode() == PUMP_VALVE_MODE_CIRCULATION) ||
-                        (UV_IsOn() != 0U)) ? 1U : 0U;
-  // ==================== 错误检测1：传感器与安全保护 ====================
-  // 1. 缺水保护：运行中但水位过低 → 报缺水故障
-  if ((active_needs_water != 0U) && (water_level < SENSOR_WATER_MIN_SAFE_LITERS))
-  {
-    system_err1 |= BUCKET_ERR1_LACK_WATER;
-  }
-  // 2. 水位传感器故障
-  if (Sensor_IsWaterSensorOk() == 0U)
-  {
-    system_err1 |= BUCKET_ERR1_WATER_SENSOR;
-  }
-  // 3. 温度传感器故障
-  if (Sensor_IsTempSensorOk() == 0U)
-  {
-    system_err1 |= BUCKET_ERR1_TEMP_SENSOR;
-  }
-  // 4. 温度异常保护：温度过高 → 报温度异常故障
-  if (Sensor_GetTemperatureC() >= TEMP_HIGH_CUTOFF_C)
-  {
-    system_err1 |= BUCKET_ERR1_TEMP_ABNORMAL;
-  }
-  // 5. 加热超时保护：加热开启超过一定时间且温度未达到合理范围 → 报加热超时故障
-  if (Temp_HasFault() != 0U)
-  {
-    system_err2 |= BUCKET_ERR2_HEAT_MODULE;
-  }
-  // 6. 水泵故障
-  if (PumpValve_HasFault() != 0U)
-  {
-    system_err2 |= BUCKET_ERR2_PUMP;
-  }
-  // 7. 电机故障
-  if (Motor_HasFault() != 0U)
-  {
-    system_err2 |= BUCKET_ERR2_MOTOR;
-  }
-  // 8. UV灯故障
-  if (UV_HasFault() != 0U)
-  {
-    system_err2 |= BUCKET_ERR2_UV;
-  }
-  // 9. 电池电压异常保护：电池电压过低或过高 → 报电池异常故障
-  battery_dv = Sensor_GetBatteryDeciVolt();
-  // 电压异常（过低 或 过高）
+  was_connected = bucket_connected;
+  bucket_connected = (connected != 0U) ? 1U : 0U;
+  base_link_status = bucket_connected;
   /*
-  if ((battery_dv != 0U) && ((battery_dv < SYSTEM_BAT_LOW_DV) || (battery_dv > SYSTEM_BAT_HIGH_DV)))
+   * 只有在需要桶体协同的阶段掉线，才立即停止流程。
+   * 例如单独排水不依赖桶体，断开时仍可按本机状态继续处理。
+   */
+  if ((was_connected != 0U) && (bucket_connected == 0U) && (bucket_circulation_requested != 0U))
   {
-    system_err2 |= BUCKET_ERR2_BATTERY;
-    if (battery_dv < SYSTEM_BAT_LOW_DV)
-    {
-      system_main_status = BUCKET_STATUS_LOW_POWER;
-      SystemMonitor_StopAllOutputs();
-    }
-  }*/
+    Base_AllOutputsOff();
+    base_action = BASE_ACTION_IDLE;
+    base_action_deadline = 0UL;
+    base_main_status = BASE_STATUS_STANDBY;
+    base_sub_status = BASE_SUB_IDLE;
+  }
+}
 
-  // ==================== 定时关机处理 ====================
-  // 定时时间到 → 自动停止所有功能，进入待机
-  if ((system_timer_deadline_tick != 0UL) && (SystemMonitor_GetTimerRemainingMin() == 0U))
+uint8_t Base_IsBucketConnected(void)
+{
+  return bucket_connected;
+}
+
+uint8_t Base_IsBucketCirculationRequested(void)
+{
+  return bucket_circulation_requested;
+}
+
+void Base_SetLevelSensorValue(uint8_t level)
+{
+  level_sensor_value = level;
+}
+
+void Base_HandleCommand(const uint8_t *frame)
+{
+  uint8_t cmd;
+
+  if (frame == NULL)
   {
-    system_timer_deadline_tick = 0UL;
-    SystemMonitor_StopAllOutputs();
-    system_main_status = BUCKET_STATUS_STANDBY;
-    system_sub_status = 0U;
+    return;
   }
 
-  // ==================== 系统复位处理 ====================
-  // 收到复位请求 → 延时200ms后重启系统
-  if ((system_reset_requested != 0U) && ((HAL_GetTick() - system_reset_tick) > 200UL))
+  /*
+   * 协议字段：
+   *   frame[3]  = 基站命令 0xB0-0xBF
+   *   frame[17] = 清洁液喷淋时间，单位分钟
+   *   frame[18] = 清水/热水喷淋时间，单位分钟
+   *   frame[19] = 烘干时间编码，1-9 表示 10-90 分钟
+   */
+  cmd = frame[3];
+  base_last_cmd = cmd;
+  base_clean_spray_min = frame[17];
+  base_clear_spray_min = frame[18];
+  base_dry_code = frame[19];
+
+  switch (cmd)
   {
-    NVIC_SystemReset();
+    case BASE_CMD_OFF:
+      Base_AllOutputsOff();
+      base_action = BASE_ACTION_IDLE;
+      base_main_status = BASE_STATUS_OFF;
+      base_sub_status = BASE_SUB_IDLE;
+      break;
+
+    case BASE_CMD_STANDBY:
+      Base_FinishToStandby();
+      break;
+
+    case BASE_CMD_AUTO_CLEAN:
+      Logging_Print("Auto clean start\r\n");
+      Base_StartAutoClean();
+      break;
+
+    case BASE_CMD_FORCE_DRAIN:
+      Base_ApplyDrain();
+      Base_StartTimedAction(BASE_ACTION_FORCE_DRAIN, BASE_SUB_FORCE_DRAIN, BASE_DEFAULT_DRAIN_MS);
+      break;
+
+    case BASE_CMD_CLEAN_SPRAY:
+      Base_ApplyHotSpray(1U);
+      Base_StartTimedAction(BASE_ACTION_SINGLE_CLEAN_SPRAY, BASE_SUB_SINGLE_CLEAN_SPRAY, Base_MinToMs(base_clean_spray_min));
+      break;
+
+    case BASE_CMD_CLEAR_SPRAY:
+      Base_ApplyHotSpray(0U);
+      Base_StartTimedAction(BASE_ACTION_SINGLE_CLEAR_SPRAY, BASE_SUB_SINGLE_CLEAR_SPRAY, Base_MinToMs(base_clear_spray_min));
+      break;
+
+    case BASE_CMD_DRY:
+      Base_ApplyDry();
+      Base_StartTimedAction(BASE_ACTION_SINGLE_DRY, BASE_SUB_SINGLE_DRY, Base_DryCodeToMs(base_dry_code));
+      break;
+
+    case BASE_CMD_SELF_CHECK:
+      SystemMonitor_ClearErrors();
+      base_main_status = BASE_STATUS_SELF_CHECK;
+      base_sub_status = BASE_SUB_IDLE;
+      ColorLight_SetRgbw(0U, 50U, 0U, 0U);
+      break;
+
+    default:
+      break;
+  }
+}
+
+void Base_BuildStatusData(uint8_t *frame)
+{
+  if (frame == NULL)
+  {
+    return;
+  }
+
+  /*
+   * 基站状态上报数据：
+   *   frame[16] 上水控制状态
+   *   frame[17] 清洁液喷淋时间
+   *   frame[18] 清水/热水喷淋时间
+   *   frame[19] 烘干时间编码
+   *   frame[20] 药泵1状态
+   *   frame[21] 药泵2状态
+   *   frame[22] 清洁液泵状态
+   *   frame[23] 主状态
+   *   frame[24] 子状态
+   *   frame[25] 错误码1
+   *   frame[26] 错误码2
+   *   frame[27] 氛围灯状态
+   */
+  frame[4] = bucket_connected;
+  frame[16] = (HAL_GPIO_ReadPin(WATER_IN_GPIO_Port, WATER_IN_Pin) == GPIO_PIN_SET) ? 1U : 0U;
+  frame[17] = base_clean_spray_min;
+  frame[18] = base_clear_spray_min;
+  frame[19] = base_dry_code;
+  frame[20] = (HAL_GPIO_ReadPin(MED_PUMP1_GPIO_Port, MED_PUMP1_Pin) == GPIO_PIN_SET) ? 1U : 0U;
+  frame[21] = (HAL_GPIO_ReadPin(MED_PUMP2_GPIO_Port, MED_PUMP2_Pin) == GPIO_PIN_SET) ? 1U : 0U;
+  frame[22] = (HAL_GPIO_ReadPin(CLEAN_PUMP_GPIO_Port, CLEAN_PUMP_Pin) == GPIO_PIN_SET) ? 1U : 0U;
+  frame[23] = base_main_status;
+  frame[24] = base_sub_status;
+  frame[25] = SystemMonitor_GetErrCode1();
+  frame[26] = SystemMonitor_GetErrCode2();
+
+  if (base_main_status == BASE_STATUS_ERROR)
+  {
+    frame[27] = 0x04U;
+  }
+  else if (base_sub_status == BASE_SUB_DRY || base_sub_status == BASE_SUB_SINGLE_DRY)
+  {
+    frame[27] = 0x03U;
+  }
+  else if (base_sub_status != BASE_SUB_IDLE)
+  {
+    frame[27] = 0x02U;
+  }
+  else
+  {
+    frame[27] = 0x00U;
   }
 }
