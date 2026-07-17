@@ -39,7 +39,7 @@ void MX_USART2_UART_Init(void)
 {
   /* USART2: JZ_TX1/JZ_RX1，液位传感器通信串口，使用 RX/TX DMA。 */
   huart2.Instance = USART2;
-  huart2.Init.BaudRate = 115200;
+  huart2.Init.BaudRate = 38400;
   huart2.Init.WordLength = UART_WORDLENGTH_8B;
   huart2.Init.StopBits = UART_STOPBITS_1;
   huart2.Init.Parity = UART_PARITY_NONE;

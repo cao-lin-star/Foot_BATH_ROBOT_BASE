@@ -70,14 +70,14 @@ const osThreadAttr_t BaseCommTask_attributes = {
 osThreadId_t BaseLogTaskHandle;
 const osThreadAttr_t BaseLogTask_attributes = {
   .name = "BaseLog",
-  .stack_size = 128 * 4,
+  .stack_size = 512 * 4,
   .priority = (osPriority_t) osPriorityLow,
 };
 /* Definitions for BaseStateTask */
 osThreadId_t BaseStateTaskHandle;
 const osThreadAttr_t BaseStateTask_attributes = {  
   .name = "BaseState",
-  .stack_size = 128 * 4,
+  .stack_size = 256 * 4,
   .priority = (osPriority_t) osPriorityHigh,
 };
 
@@ -231,6 +231,21 @@ void BaseState_Task(void *argument)
 
 /* Private application code --------------------------------------------------*/
 /* USER CODE BEGIN Application */
+void vApplicationStackOverflowHook(TaskHandle_t xTask, char *pcTaskName)
+{
+  (void)xTask;
+  (void)pcTaskName;
+  taskDISABLE_INTERRUPTS();
+  for (;;)
+  {
+  }
+}
 
+void vApplicationMallocFailedHook(void)
+{
+  taskDISABLE_INTERRUPTS();
+  for (;;)
+  {
+  }
+}
 /* USER CODE END Application */
-

@@ -16,10 +16,10 @@ extern "C" {
  *   TIM4_CH3 -> LED_G(PB8)
  *   TIM4_CH4 -> LED_R(PB9)
  */
-#define COLOR_LIGHT_CHANNEL_R    0U
-#define COLOR_LIGHT_CHANNEL_G    1U
-#define COLOR_LIGHT_CHANNEL_B    2U
-#define COLOR_LIGHT_CHANNEL_W    3U
+#define COLOR_LIGHT_CHANNEL_R    0U  /* 红色通道编号。 */
+#define COLOR_LIGHT_CHANNEL_G    1U  /* 绿色通道编号。 */
+#define COLOR_LIGHT_CHANNEL_B    2U  /* 蓝色通道编号。 */
+#define COLOR_LIGHT_CHANNEL_W    3U  /* 白色通道编号。 */
 
 /* 启动 TIM4 四路 PWM，默认保持当前缓存亮度。 */
 void ColorLight_Init(void);
@@ -27,7 +27,7 @@ void ColorLight_Init(void);
 /* 关闭 TIM4 PWM 输出，通常只在外设反初始化时使用。 */
 void ColorLight_DeInit(void);
 
-/* 四个通道亮度全部置 0。 */
+/* 将四个通道亮度全部置 0。 */
 void ColorLight_Off(void);
 
 /* 设置 RGB 亮度，范围 0-100，白光通道自动置 0。 */

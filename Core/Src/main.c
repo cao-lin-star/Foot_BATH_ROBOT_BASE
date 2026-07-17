@@ -26,6 +26,7 @@
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
+#include "motor_control.h"
 
 /* USER CODE END Includes */
 
@@ -184,6 +185,10 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
     HAL_IncTick();
   }
   /* USER CODE BEGIN Callback 1 */
+  else if (htim->Instance == TIM3)
+  {
+    Motor_StepTimerElapsed();
+  }
 
   /* USER CODE END Callback 1 */
 }

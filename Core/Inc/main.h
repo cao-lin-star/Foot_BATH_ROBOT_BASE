@@ -64,9 +64,9 @@ void Error_Handler(void);
  *   LOG_RX1/LOG_TX1   -> USART3 桶体通信串口
  *   JZ_TX1/JZ_RX1     -> USART2 液位传感器串口
  */
-#define DRY_FAN_Pin GPIO_PIN_0
+#define DRY_FAN_Pin GPIO_PIN_1
 #define DRY_FAN_GPIO_Port GPIOA
-#define EN_HEAT_Pin GPIO_PIN_1
+#define EN_HEAT_Pin GPIO_PIN_0
 #define EN_HEAT_GPIO_Port GPIOA
 #define JZ_TX1_Pin GPIO_PIN_2
 #define JZ_TX1_GPIO_Port GPIOA

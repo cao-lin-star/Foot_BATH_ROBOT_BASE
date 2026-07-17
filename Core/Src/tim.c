@@ -109,8 +109,6 @@ void MX_TIM3_Init(void)
   }
 
   TIM_ConfigPwmChannel(&htim3, TIM_CHANNEL_2);
-  TIM_ConfigPwmChannel(&htim3, TIM_CHANNEL_3);
-  TIM_ConfigPwmChannel(&htim3, TIM_CHANNEL_4);
   HAL_TIM_MspPostInit(&htim3);
 }
 
@@ -160,6 +158,8 @@ void HAL_TIM_PWM_MspInit(TIM_HandleTypeDef* tim_pwmHandle)
   else if(tim_pwmHandle->Instance==TIM3)
   {
     __HAL_RCC_TIM3_CLK_ENABLE();
+    HAL_NVIC_SetPriority(TIM3_IRQn, 6, 0);
+    HAL_NVIC_EnableIRQ(TIM3_IRQn);
   }
   else if(tim_pwmHandle->Instance==TIM4)
   {
@@ -191,8 +191,11 @@ void HAL_TIM_MspPostInit(TIM_HandleTypeDef* timHandle)
     GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
     HAL_GPIO_Init(STP_MS_GPIO_Port, &GPIO_InitStruct);
 
+    HAL_GPIO_WritePin(DIR_MS_GPIO_Port, DIR_MS_Pin, GPIO_PIN_RESET);
+    HAL_GPIO_WritePin(ENABLE_MS_GPIO_Port, ENABLE_MS_Pin, GPIO_PIN_SET);
     GPIO_InitStruct.Pin = DIR_MS_Pin|ENABLE_MS_Pin;
-    GPIO_InitStruct.Mode = GPIO_MODE_AF_PP;
+    GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
+    GPIO_InitStruct.Pull = GPIO_NOPULL;
     GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
     HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
   }
@@ -215,6 +218,7 @@ void HAL_TIM_PWM_MspDeInit(TIM_HandleTypeDef* tim_pwmHandle)
   }
   else if(tim_pwmHandle->Instance==TIM3)
   {
+    HAL_NVIC_DisableIRQ(TIM3_IRQn);
     __HAL_RCC_TIM3_CLK_DISABLE();
   }
   else if(tim_pwmHandle->Instance==TIM4)
