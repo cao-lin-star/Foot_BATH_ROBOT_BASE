@@ -24,10 +24,10 @@ typedef struct
   uint8_t valid[NTC_SENSOR_CHANNEL_COUNT];
 } NtcSensorSnapshot_t;
 
-/* Enable both divider networks, calibrate ADC1 and start circular DMA scans. */
+/* Calibrate ADC1 and start circular DMA scans; divider power follows main state. */
 void NTC_Sensor_Init(void);
 
-/* Apply the same 20ms raw/temperature IIR filters as Foot_bath_robot_V1. */
+/* Gate divider power in OFF/STANDBY and apply the V1 20ms filters otherwise. */
 void NTC_Sensor_TaskProcess(void);
 
 /* Copy the diagnostic snapshot; values are not used by base business logic. */

@@ -347,19 +347,13 @@ void Logging_TaskProcess(void)
                  light_b,
                  light_w);
 
-  Logging_Printf("[ NTC] IN=%c%u.%uC OK=%u RAW=%u MV=%u | OUT=%c%u.%uC OK=%u RAW=%u MV=%u\r\n",
+  Logging_Printf("[ NTC] IN=%c%u.%uC | OUT=%c%u.%uC\r\n",
                  inlet_temp_sign,
                  inlet_temp_abs / 10U,
                  inlet_temp_abs % 10U,
-                 ntc.valid[NTC_SENSOR_INLET],
-                 ntc.raw[NTC_SENSOR_INLET],
-                 ntc.millivolt[NTC_SENSOR_INLET],
                  outlet_temp_sign,
                  outlet_temp_abs / 10U,
-                 outlet_temp_abs % 10U,
-                 ntc.valid[NTC_SENSOR_OUTLET],
-                 ntc.raw[NTC_SENSOR_OUTLET],
-                 ntc.millivolt[NTC_SENSOR_OUTLET]);
+                 outlet_temp_abs % 10U);
 }
 
 HAL_StatusTypeDef Logging_GetLastStatus(void)

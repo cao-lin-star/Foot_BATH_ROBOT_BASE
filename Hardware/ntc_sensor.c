@@ -1,6 +1,7 @@
 #include "ntc_sensor.h"
 #include "adc.h"
 #include "main.h"
+#include "system_monitor.h"
 #include <math.h>
 #include <string.h>
 
@@ -20,7 +21,24 @@ static float ntc_temp_filter_c[NTC_SENSOR_CHANNEL_COUNT];
 static uint8_t ntc_temp_filter_ready[NTC_SENSOR_CHANNEL_COUNT];
 static uint8_t ntc_raw_filter_ready;
 static uint8_t ntc_sampling_active;
+static uint8_t ntc_power_enabled;
 static NtcSensorSnapshot_t ntc_snapshot;
+
+static void NTC_ResetMeasurements(void)
+{
+  uint8_t index;
+
+  memset(ntc_raw_filter_acc, 0, sizeof(ntc_raw_filter_acc));
+  memset(ntc_temp_filter_c, 0, sizeof(ntc_temp_filter_c));
+  memset(ntc_temp_filter_ready, 0, sizeof(ntc_temp_filter_ready));
+  memset(&ntc_snapshot, 0, sizeof(ntc_snapshot));
+  ntc_raw_filter_ready = 0U;
+
+  for (index = 0U; index < NTC_SENSOR_CHANNEL_COUNT; index++)
+  {
+    ntc_snapshot.temperature_x10[index] = NTC_SENSOR_TEMP_INVALID_X10;
+  }
+}
 
 static void NTC_RestoreIrq(uint32_t primask)
 {
@@ -97,24 +115,14 @@ static void NTC_ProcessTemperature(uint8_t index, float temperature_c)
 
 void NTC_Sensor_Init(void)
 {
-  uint8_t index;
-
   memset((void *)ntc_adc_dma, 0, sizeof(ntc_adc_dma));
-  memset(ntc_raw_filter_acc, 0, sizeof(ntc_raw_filter_acc));
-  memset(ntc_temp_filter_c, 0, sizeof(ntc_temp_filter_c));
-  memset(ntc_temp_filter_ready, 0, sizeof(ntc_temp_filter_ready));
-  memset(&ntc_snapshot, 0, sizeof(ntc_snapshot));
-  ntc_raw_filter_ready = 0U;
+  NTC_ResetMeasurements();
   ntc_sampling_active = 0U;
+  ntc_power_enabled = 0U;
 
-  for (index = 0U; index < NTC_SENSOR_CHANNEL_COUNT; index++)
-  {
-    ntc_snapshot.temperature_x10[index] = NTC_SENSOR_TEMP_INVALID_X10;
-  }
-
-  /* V1 powers the divider before calibration and does not add a settle delay. */
-  HAL_GPIO_WritePin(INLET_NTC_EN_GPIO_Port, INLET_NTC_EN_Pin, GPIO_PIN_SET);
-  HAL_GPIO_WritePin(OUTLET_NTC_EN_GPIO_Port, OUTLET_NTC_EN_Pin, GPIO_PIN_SET);
+  /* POWER_ON is applied by the periodic task after the state machine is ready. */
+  HAL_GPIO_WritePin(INLET_NTC_EN_GPIO_Port, INLET_NTC_EN_Pin, GPIO_PIN_RESET);
+  HAL_GPIO_WritePin(OUTLET_NTC_EN_GPIO_Port, OUTLET_NTC_EN_Pin, GPIO_PIN_RESET);
 
   if (HAL_ADCEx_Calibration_Start(&hadc1) != HAL_OK)
   {
@@ -140,11 +148,31 @@ void NTC_Sensor_Init(void)
 void NTC_Sensor_TaskProcess(void)
 {
   uint8_t index;
+  uint8_t should_enable;
+  uint8_t main_status;
   uint16_t raw;
   float temperature_c;
 
+  main_status = SystemMonitor_GetMainStatus();
+  should_enable = ((ntc_sampling_active != 0U) &&
+                   (main_status != BASE_STATUS_OFF) &&
+                   (main_status != BASE_STATUS_STANDBY)) ? 1U : 0U;
+
+  if (should_enable != ntc_power_enabled)
+  {
+    HAL_GPIO_WritePin(INLET_NTC_EN_GPIO_Port, INLET_NTC_EN_Pin,
+                      (should_enable != 0U) ? GPIO_PIN_SET : GPIO_PIN_RESET);
+    HAL_GPIO_WritePin(OUTLET_NTC_EN_GPIO_Port, OUTLET_NTC_EN_Pin,
+                      (should_enable != 0U) ? GPIO_PIN_SET : GPIO_PIN_RESET);
+    ntc_power_enabled = should_enable;
+    NTC_ResetMeasurements();
+
+    /* Wait one 20ms task period after power-up before accepting ADC data. */
+    return;
+  }
+
   /* NTC is diagnostic-only: an ADC startup failure must not block base logic. */
-  if (ntc_sampling_active == 0U)
+  if ((ntc_sampling_active == 0U) || (ntc_power_enabled == 0U))
   {
     return;
   }
