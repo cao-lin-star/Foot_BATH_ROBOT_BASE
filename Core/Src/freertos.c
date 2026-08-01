@@ -27,6 +27,7 @@
 /* USER CODE BEGIN Includes */
 #include "color_light.h"
 #include "motor_control.h"
+#include "ntc_sensor.h"
 #include "uart_comm.h"
 #include "log.h"
 #include "system_monitor.h"
@@ -108,6 +109,7 @@ void MX_FREERTOS_Init(void) {
    */
   ColorLight_Init();
   Motor_Init();
+  NTC_Sensor_Init();
   SystemMonitor_Init();
   Logging_Init();
   UART_Comm_Init();
@@ -163,10 +165,11 @@ void MX_FREERTOS_Init(void) {
 void BaseMotor_Task(void *argument)
 {
   /* USER CODE BEGIN BaseMotor_Task */
-  /* 喷淋电机周期任务，预留给 PWM 刷新、故障检测和后续自动换向逻辑。 */
+  /* 喷淋电机维护及两路 NTC 诊断滤波，均不阻塞业务状态机。 */
   for(;;)
   {
     Motor_TaskProcess();
+    NTC_Sensor_TaskProcess();
     osDelay(20);
   }
   /* USER CODE END BaseMotor_Task */

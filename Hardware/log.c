@@ -2,6 +2,7 @@
 #include "color_light.h"
 #include "main.h"
 #include "motor_control.h"
+#include "ntc_sensor.h"
 #include "system_monitor.h"
 #include "usart.h"
 #include <stdarg.h>
@@ -280,10 +281,36 @@ void Logging_TaskProcess(void)
   uint8_t light_g;
   uint8_t light_b;
   uint8_t light_w;
+  NtcSensorSnapshot_t ntc;
+  int16_t inlet_temp_x10;
+  int16_t outlet_temp_x10;
+  uint16_t inlet_temp_abs;
+  uint16_t outlet_temp_abs;
+  char inlet_temp_sign;
+  char outlet_temp_sign;
 
   err1 = SystemMonitor_GetErrCode1();
   err2 = SystemMonitor_GetErrCode2();
   ColorLight_GetRgbw(&light_r, &light_g, &light_b, &light_w);
+  NTC_Sensor_GetSnapshot(&ntc);
+
+  inlet_temp_x10 = ntc.temperature_x10[NTC_SENSOR_INLET];
+  inlet_temp_sign = '+';
+  if (inlet_temp_x10 < 0)
+  {
+    inlet_temp_sign = '-';
+    inlet_temp_x10 = (int16_t)(-inlet_temp_x10);
+  }
+  inlet_temp_abs = (uint16_t)inlet_temp_x10;
+
+  outlet_temp_x10 = ntc.temperature_x10[NTC_SENSOR_OUTLET];
+  outlet_temp_sign = '+';
+  if (outlet_temp_x10 < 0)
+  {
+    outlet_temp_sign = '-';
+    outlet_temp_x10 = (int16_t)(-outlet_temp_x10);
+  }
+  outlet_temp_abs = (uint16_t)outlet_temp_x10;
 
   Logging_Printf("[BASE] CMD=%02X | LINK=%u | BST=%02X T=%u EL=%lus TS=%lus | CW=%u TW=%u WIN=%u | ERR=%02X/%02X LOW=%u/%u/%u LB=%u\r\n",
                  SystemMonitor_GetCommand(),
@@ -302,7 +329,7 @@ void Logging_TaskProcess(void)
                  ((err1 & BASE_ERR1_CLEAN_LOW) != 0U) ? 1U : 0U,
                  ((err1 & BASE_ERR1_LEVEL_BOARD) != 0U) ? 1U : 0U);
 
-  Logging_Printf("[ OUT] WIN=%u WOUT=%u | MED1=%u MED2=%u CLEAN=%u | HEAT=%u FAN=%u IR=%u SPARE=%u | "
+  Logging_Printf("[ OUT] WIN=%u WOUT=%u | MED1=%u MED2=%u CLEAN=%u | HEAT=%u FAN=%u IR=%u | "
                  "MOT POS=%u BUSY=%u F=%u | LED=%u/%u/%u/%u\r\n",
                  (HAL_GPIO_ReadPin(WATER_IN_GPIO_Port, WATER_IN_Pin) == GPIO_PIN_SET) ? 1U : 0U,
                  (HAL_GPIO_ReadPin(WATER_OUT_GPIO_Port, WATER_OUT_Pin) == GPIO_PIN_SET) ? 1U : 0U,
@@ -310,9 +337,8 @@ void Logging_TaskProcess(void)
                  (HAL_GPIO_ReadPin(MED_PUMP2_GPIO_Port, MED_PUMP2_Pin) == GPIO_PIN_SET) ? 1U : 0U,
                  (HAL_GPIO_ReadPin(CLEAN_PUMP_GPIO_Port, CLEAN_PUMP_Pin) == GPIO_PIN_SET) ? 1U : 0U,
                  (HAL_GPIO_ReadPin(EN_HEAT_GPIO_Port, EN_HEAT_Pin) == GPIO_PIN_SET) ? 1U : 0U,
-                 (HAL_GPIO_ReadPin(DRY_FAN_GPIO_Port, DRY_FAN_Pin) == GPIO_PIN_SET) ? 1U : 0U,
+                 (HAL_GPIO_ReadPin(EN_FAN_GPIO_Port, EN_FAN_Pin) == GPIO_PIN_SET) ? 1U : 0U,
                  (HAL_GPIO_ReadPin(EN_IR_GPIO_Port, EN_IR_Pin) == GPIO_PIN_SET) ? 1U : 0U,
-                 (HAL_GPIO_ReadPin(SPARE_SW_GPIO_Port, SPARE_SW_Pin) == GPIO_PIN_SET) ? 1U : 0U,
                  (uint8_t)Motor_GetPosition(),
                  Motor_IsBusy(),
                  Motor_HasFault(),
@@ -320,6 +346,20 @@ void Logging_TaskProcess(void)
                  light_g,
                  light_b,
                  light_w);
+
+  Logging_Printf("[ NTC] IN=%c%u.%uC OK=%u RAW=%u MV=%u | OUT=%c%u.%uC OK=%u RAW=%u MV=%u\r\n",
+                 inlet_temp_sign,
+                 inlet_temp_abs / 10U,
+                 inlet_temp_abs % 10U,
+                 ntc.valid[NTC_SENSOR_INLET],
+                 ntc.raw[NTC_SENSOR_INLET],
+                 ntc.millivolt[NTC_SENSOR_INLET],
+                 outlet_temp_sign,
+                 outlet_temp_abs / 10U,
+                 outlet_temp_abs % 10U,
+                 ntc.valid[NTC_SENSOR_OUTLET],
+                 ntc.raw[NTC_SENSOR_OUTLET],
+                 ntc.millivolt[NTC_SENSOR_OUTLET]);
 }
 
 HAL_StatusTypeDef Logging_GetLastStatus(void)

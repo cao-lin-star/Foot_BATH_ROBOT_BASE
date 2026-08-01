@@ -229,14 +229,13 @@ static void Base_AllOutputsOff(void)
   /*
    * 基站总停止函数�?   * 所有关机、待机、异常退出都从这里收口，避免某个输出遗漏关闭�?   */
   Base_SetOutput(EN_HEAT_GPIO_Port, EN_HEAT_Pin, 0U);
-  Base_SetOutput(DRY_FAN_GPIO_Port, DRY_FAN_Pin, 0U);
+  Base_SetOutput(EN_FAN_GPIO_Port, EN_FAN_Pin, 0U);
   Base_SetOutput(WATER_IN_GPIO_Port, WATER_IN_Pin, 0U);
   Base_SetOutput(WATER_OUT_GPIO_Port, WATER_OUT_Pin, 0U);
   Base_SetOutput(EN_IR_GPIO_Port, EN_IR_Pin, 0U);
   Base_SetOutput(MED_PUMP1_GPIO_Port, MED_PUMP1_Pin, 0U);
   Base_SetOutput(MED_PUMP2_GPIO_Port, MED_PUMP2_Pin, 0U);
   Base_SetOutput(CLEAN_PUMP_GPIO_Port, CLEAN_PUMP_Pin, 0U);
-  Base_SetOutput(SPARE_SW_GPIO_Port, SPARE_SW_Pin, 0U);
   Motor_Stop();
   base_pending_output = BASE_POSITIONED_OUTPUT_NONE;
   base_pending_duration_ms = 0UL;
@@ -276,12 +275,11 @@ static void Base_StartPositionedAction(BaseAction_t action,
   Base_SetOutput(WATER_IN_GPIO_Port, WATER_IN_Pin, 0U);
   Base_SetOutput(WATER_OUT_GPIO_Port, WATER_OUT_Pin, 0U);
   Base_SetOutput(EN_HEAT_GPIO_Port, EN_HEAT_Pin, 0U);
-  Base_SetOutput(DRY_FAN_GPIO_Port, DRY_FAN_Pin, 0U);
+  Base_SetOutput(EN_FAN_GPIO_Port, EN_FAN_Pin, 0U);
   Base_SetOutput(EN_IR_GPIO_Port, EN_IR_Pin, 0U);
   Base_SetOutput(MED_PUMP1_GPIO_Port, MED_PUMP1_Pin, 0U);
   Base_SetOutput(MED_PUMP2_GPIO_Port, MED_PUMP2_Pin, 0U);
   Base_SetOutput(CLEAN_PUMP_GPIO_Port, CLEAN_PUMP_Pin, 0U);
-  Base_SetOutput(SPARE_SW_GPIO_Port, SPARE_SW_Pin, 0U);
   Base_StopMedicineDosing();
   bucket_circulation_requested = 0U;
   base_auto_fill_active = 0U;
@@ -522,7 +520,7 @@ static void Base_ApplyDry(void)
   Base_SetOutput(EN_HEAT_GPIO_Port, EN_HEAT_Pin, 0U);
   Base_SetOutput(CLEAN_PUMP_GPIO_Port, CLEAN_PUMP_Pin, 0U);
   Motor_Stop();
-  Base_SetOutput(DRY_FAN_GPIO_Port, DRY_FAN_Pin, 1U);
+  Base_SetOutput(EN_FAN_GPIO_Port, EN_FAN_Pin, 1U);
   bucket_circulation_requested = 0U;
   ColorLight_SetRgbw(70U, 20U, 0U, 20U);
 }

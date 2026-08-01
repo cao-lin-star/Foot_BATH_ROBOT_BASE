@@ -45,12 +45,16 @@ void MX_DMA_Init(void)
   /* DMA interrupt init */
   /*
    * DMA 通道分配：
+   *   DMA1_Channel1 = ADC1，两路 NTC 连续扫描
    *   DMA1_Channel2 = USART3_TX，桶体状态帧发送
    *   DMA1_Channel3 = USART3_RX，桶体命令帧接收
    *   DMA1_Channel4 = USART1_TX，日志输出
    *   DMA1_Channel6 = USART2_RX，液位传感器接收
    *   DMA1_Channel7 = USART2_TX，液位传感器发送预留
    */
+  /* DMA1_Channel1_IRQn interrupt configuration */
+  HAL_NVIC_SetPriority(DMA1_Channel1_IRQn, 6, 0);
+  HAL_NVIC_EnableIRQ(DMA1_Channel1_IRQn);
   /* DMA1_Channel2_IRQn interrupt configuration */
   HAL_NVIC_SetPriority(DMA1_Channel2_IRQn, 6, 0);
   HAL_NVIC_EnableIRQ(DMA1_Channel2_IRQn);

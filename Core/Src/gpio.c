@@ -23,20 +23,32 @@ void MX_GPIO_Init(void)
    * 上电默认关闭所有执行器。
    * 这样在 FreeRTOS 和业务状态机启动前，不会误开加热、风机、水阀或药泵。
    */
-  HAL_GPIO_WritePin(GPIOA, DRY_FAN_Pin|EN_HEAT_Pin|RESERVED_Pin, GPIO_PIN_RESET);
-  HAL_GPIO_WritePin(GPIOB, EN_IR_Pin|WATER_OUT_Pin|WATER_IN_Pin|MED_PUMP1_Pin|
-                          MED_PUMP2_Pin|CLEAN_PUMP_Pin|SPARE_SW_Pin, GPIO_PIN_RESET);
+  HAL_GPIO_WritePin(GPIOA, MOTOR_IN4_Pin|MOTOR_IN3_Pin|INLET_NTC_EN_Pin|
+                           EN_HEAT_Pin|EN_FAN_Pin|RESERVED_Pin, GPIO_PIN_RESET);
+  HAL_GPIO_WritePin(GPIOB, MOTOR_IN2_Pin|MOTOR_IN1_Pin|EN_IR_Pin|WATER_OUT_Pin|
+                           WATER_IN_Pin|MED_PUMP1_Pin|MED_PUMP2_Pin|CLEAN_PUMP_Pin|
+                           OUTLET_NTC_EN_Pin, GPIO_PIN_RESET);
 
-  /* GPIOA 输出：烘干风机、加热、PA15 预留。 */
-  GPIO_InitStruct.Pin = DRY_FAN_Pin|EN_HEAT_Pin|RESERVED_Pin;
+  /* ULN2003 四相输入：推挽、无上下拉、低速，上电保持全低避免线圈误励磁。 */
+  GPIO_InitStruct.Pin = MOTOR_IN4_Pin|MOTOR_IN3_Pin;
+  GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
+  GPIO_InitStruct.Pull = GPIO_NOPULL;
+  GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
+  HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
+
+  GPIO_InitStruct.Pin = MOTOR_IN2_Pin|MOTOR_IN1_Pin;
+  HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
+
+  /* GPIOA 输出：进水口 NTC 使能、加热、烘干风机和 PA15 预留。 */
+  GPIO_InitStruct.Pin = INLET_NTC_EN_Pin|EN_HEAT_Pin|EN_FAN_Pin|RESERVED_Pin;
   GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_MEDIUM;
   HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
 
-  /* GPIOB 输出：红外引导灯、水阀、药泵、清洁液泵和备用开关。 */
+  /* GPIOB 输出：红外、水阀、药泵、清洁液泵和出水口 NTC 使能。 */
   GPIO_InitStruct.Pin = EN_IR_Pin|WATER_OUT_Pin|WATER_IN_Pin|MED_PUMP1_Pin|
-                        MED_PUMP2_Pin|CLEAN_PUMP_Pin|SPARE_SW_Pin;
+                        MED_PUMP2_Pin|CLEAN_PUMP_Pin|OUTLET_NTC_EN_Pin;
   GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_MEDIUM;

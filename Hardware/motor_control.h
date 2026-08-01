@@ -9,41 +9,14 @@ extern "C" {
 #endif
 
 /*
- * 喷淋杆电机驱动模式。
- * 当前硬件使用 MS4988 步进电机驱动器，DC 模式仅为兼容早期方案保留。
+ * 喷淋杆使用 28BYJ-48/ULN2003 八拍半步驱动。
+ * 按约 4096 半步/输出轴一圈计算，0 度到 90 度需要 1024 半步。
+ * TIM3 基本更新中断周期配置为 3 ms，每次更新推进一个半步。
  */
-#define BASE_SPRAY_MOTOR_DC       1U
-#define BASE_SPRAY_MOTOR_STEPPER  2U
+#define MOTOR_STEPS_0_TO_90       1024U
+#define MOTOR_STEP_INTERVAL_MS    3U
 
-#ifndef BASE_SPRAY_MOTOR_MODE
-#define BASE_SPRAY_MOTOR_MODE     BASE_SPRAY_MOTOR_STEPPER
-#endif
-
-/*
- * 电机整步角为 1.8 度，1:1 传动时从 0 度到 90 度需要 50 个整步。
- * 原理图中 MS1/MS2/MS3 均为高电平，MS4988 工作在 1/16 细分模式，
- * 所以正式运行所需脉冲数应为 50 * 16 = 800。
- *
- * MOTOR_FULL_STEPS_0_TO_90 当前为 1U 时属于调试值，只输出 16 个微步；
- * 正式运行时应将其设置为 50U。
- */
-#define MOTOR_STEP_FREQUENCY_HZ   1000U
-#define MOTOR_FULL_STEPS_0_TO_90  50U
-#define MOTOR_MICROSTEP_DIVISOR   2U
-#define MOTOR_STEPS_0_TO_90       (MOTOR_FULL_STEPS_0_TO_90 * MOTOR_MICROSTEP_DIVISOR)
-
-/* MS4988 ENABLE 为低电平有效：低电平开启输出，高电平关闭输出。 */
-#define MOTOR_ENABLE_ACTIVE_LOW   1U
-
-/*
- * 从 0 度转向 90 度时 DIR_MS 的电平。
- * 现场方向相反时将该宏改为 0U，不需要交换电机相线。
- */
-#ifndef MOTOR_DIR_TO_SPRAY_HIGH
-#define MOTOR_DIR_TO_SPRAY_HIGH   1U
-#endif
-
-/* 电机方向，主要用于兼容旧接口和状态查询。 */
+/* 电机方向，正向按 1000、1100、0100...相序推进。 */
 typedef enum
 {
   MOTOR_DIR_FORWARD = 0,
@@ -61,27 +34,28 @@ typedef enum
   MOTOR_POSITION_UNKNOWN = 0xFF     /* 运动中途停止，无法确认实际角度。 */
 } MotorPosition_t;
 
-/* 初始化电机；上电前必须人工确保喷淋杆处于 0 度。 */
+/* 初始化电机；上电前必须人工确保喷淋杆处于 0 度，初始化后四相全低。 */
 void Motor_Init(void);
 
-/* 异步移动到 0 度或 90 度，STEP 脉冲由 TIM3 产生和计数。 */
+/* 异步移动到 0 度或 90 度，八拍相位由 TIM3 更新中断推进。 */
 void Motor_MoveToPosition(MotorPosition_t position);
 
-/* 立即停止 STEP 并关闭驱动器，运动中停止会丢失当前位置。 */
+/* 立即停止 TIM3 并将四相拉低；定位途中停止会丢失当前位置。 */
 void Motor_Stop(void);
 
-/* 返回 1 表示正在执行有限步数定位。 */
+/* 返回 1 表示正在执行有限半步数定位。 */
 uint8_t Motor_IsBusy(void);
 
 /* 获取软件记录的喷淋杆位置。 */
 MotorPosition_t Motor_GetPosition(void);
 
-/* TIM3 周期中断入口，每产生一个完整 STEP 周期调用一次。 */
+/* TIM3 每 3 ms 的周期中断入口，每次调用推进一个半步。 */
 void Motor_StepTimerElapsed(void);
 
 /*
  * 以下为旧版兼容或调试接口。
  * 正常喷淋杆定位应优先使用 Motor_MoveToPosition()。
+ * Motor_Run() 的 speed 只作状态记录，连续运行仍按固定 3 ms 半步周期执行。
  */
 void Motor_Run(uint8_t speed, uint8_t direction);
 void Motor_SetLevel(uint8_t level);
