@@ -23,11 +23,8 @@
 #define BASE_AUTO_FILL_TIMEOUT_MS (15UL * 60UL * 1000UL) /* 自动注水最长 15 分钟保护 */
 #define BASE_DRAIN_AFTER_EMPTY_MS (10UL * 1000UL)       /* Drain 10s after bucket water reaches 0L. */
 #define BASE_DRAIN_MAX_MS         (10UL * 60UL * 1000UL) /* Max drain time if bucket does not report 0L. */
-#define BASE_AUTO_CLEAN_CLEAR_PRE_MS    (10UL * 1000UL) /* B3 clean spray: clear water before cleaner. */
-#define BASE_AUTO_CLEAN_CLEANER1_MS     (5UL * 1000UL)  /* B3 clean spray: first cleaner pulse. */
-#define BASE_AUTO_CLEAN_WAIT1_MS        (5UL * 1000UL)  /* B3 clean spray: wait after first cleaner pulse. */
-#define BASE_AUTO_CLEAN_CLEANER2_MS     (5UL * 1000UL)  /* B3 clean spray: second cleaner pulse. */
-#define BASE_AUTO_CLEAN_WAIT2_MS        (5UL * 1000UL)  /* B3 clean spray: wait after second cleaner pulse. */
+#define BASE_AUTO_CLEAN_CLEANER_MS      (5UL * 1000UL)  /* B3 clean spray: cleaner + water. */
+#define BASE_AUTO_CLEAN_WAIT_MS         (10UL * 1000UL) /* B3 clean spray: wait after cleaner. */
 #define BASE_LEVEL_BOARD_TIMEOUT_MS 5000UL          /* 缺液控制板通信超时时间，单�?ms�?*/
 #define BASE_LEVEL_MED_PUMP1_LOW    0x01U           /* 缺液位图 bit0：药液泵 1 缺液�?*/
 #define BASE_LEVEL_MED_PUMP2_LOW    0x02U           /* 缺液位图 bit1：药液泵 2 缺液�?*/
@@ -371,35 +368,14 @@ static void Base_UpdateAutoCleanSprayPattern(uint32_t now)
   }
 
   elapsed = now - base_action_start_tick;
-  phase_end = BASE_AUTO_CLEAN_CLEAR_PRE_MS;
-  if (elapsed < phase_end)
-  {
-    Base_ApplyCleanClearWater();
-    return;
-  }
-
-  phase_end += BASE_AUTO_CLEAN_CLEANER1_MS;
+  phase_end = BASE_AUTO_CLEAN_CLEANER_MS;
   if (elapsed < phase_end)
   {
     Base_ApplyCleanSpray();
     return;
   }
 
-  phase_end += BASE_AUTO_CLEAN_WAIT1_MS;
-  if (elapsed < phase_end)
-  {
-    Base_ApplyCleanSprayWait();
-    return;
-  }
-
-  phase_end += BASE_AUTO_CLEAN_CLEANER2_MS;
-  if (elapsed < phase_end)
-  {
-    Base_ApplyCleanSpray();
-    return;
-  }
-
-  phase_end += BASE_AUTO_CLEAN_WAIT2_MS;
+  phase_end += BASE_AUTO_CLEAN_WAIT_MS;
   if (elapsed < phase_end)
   {
     Base_ApplyCleanSprayWait();
@@ -468,7 +444,7 @@ static void Base_CompletePositionedAction(void)
     case BASE_POSITIONED_OUTPUT_CLEAN_SPRAY:
       if (base_action == BASE_ACTION_AUTO_CLEAN_SPRAY)
       {
-        Base_ApplyCleanClearWater();
+        Base_ApplyCleanSpray();
         bucket_circulation_requested = 1U;
       }
       else
