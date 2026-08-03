@@ -1,4 +1,4 @@
-/* USER CODE BEGIN Header */
+﻿/* USER CODE BEGIN Header */
 /**
   ******************************************************************************
   * @file           : main.c
@@ -16,7 +16,7 @@
   ******************************************************************************
   */
 /* USER CODE END Header */
-/* Includes ------------------------------------------------------------------*/
+/* 头文件 --------------------------------------------------------------------*/
 #include "main.h"
 #include "cmsis_os.h"
 #include "adc.h"
@@ -25,41 +25,41 @@
 #include "usart.h"
 #include "gpio.h"
 
-/* Private includes ----------------------------------------------------------*/
+/* 私有头文件 ----------------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
 #include "motor_control.h"
 
 /* USER CODE END Includes */
 
-/* Private typedef -----------------------------------------------------------*/
+/* 私有类型定义 --------------------------------------------------------------*/
 /* USER CODE BEGIN PTD */
 
 /* USER CODE END PTD */
 
-/* Private define ------------------------------------------------------------*/
+/* 私有宏定义 ----------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
 
 /* USER CODE END PD */
 
-/* Private macro -------------------------------------------------------------*/
+/* 私有宏 --------------------------------------------------------------------*/
 /* USER CODE BEGIN PM */
 
 /* USER CODE END PM */
 
-/* Private variables ---------------------------------------------------------*/
+/* 私有变量 ------------------------------------------------------------------*/
 
 /* USER CODE BEGIN PV */
 
 /* USER CODE END PV */
 
-/* Private function prototypes -----------------------------------------------*/
+/* 私有函数声明 --------------------------------------------------------------*/
 void SystemClock_Config(void);
 void MX_FREERTOS_Init(void);
 /* USER CODE BEGIN PFP */
 
 /* USER CODE END PFP */
 
-/* Private user code ---------------------------------------------------------*/
+/* 私有用户代码 --------------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
 
 /* USER CODE END 0 */
@@ -75,23 +75,23 @@ int main(void)
 
   /* USER CODE END 1 */
 
-  /* MCU Configuration--------------------------------------------------------*/
+  /* MCU 配置 -----------------------------------------------------------------*/
 
-  /* Reset of all peripherals, Initializes the Flash interface and the Systick. */
+  /* 复位全部外设，并初始化 Flash 接口和系统节拍。 */
   HAL_Init();
 
   /* USER CODE BEGIN Init */
 	__HAL_AFIO_REMAP_SWJ_NOJTAG();
   /* USER CODE END Init */
 
-  /* Configure the system clock */
+  /* 配置系统时钟。 */
   SystemClock_Config();
 
   /* USER CODE BEGIN SysInit */
 
   /* USER CODE END SysInit */
 
-  /* Initialize all configured peripherals */
+  /* 初始化全部已配置外设。 */
   MX_GPIO_Init();
   MX_DMA_Init();
   MX_ADC1_Init();
@@ -105,15 +105,15 @@ int main(void)
   /* USER CODE END 2 */
 
   /* Init scheduler */
-  osKernelInitialize();  /* Call init function for freertos objects (in cmsis_os2.c) */
+  osKernelInitialize();  /* 初始化 CMSIS-RTOS2 内核对象。 */
   MX_FREERTOS_Init();
 
-  /* Start scheduler */
+  /* 启动任务调度器。 */
   osKernelStart();
 
-  /* We should never get here as control is now taken by the scheduler */
+  /* 调度器启动后不应再执行到此处。 */
 
-  /* Infinite loop */
+  /* 任务循环。 */
   /* USER CODE BEGIN WHILE */
 
   while (1)
@@ -164,7 +164,7 @@ void SystemClock_Config(void)
     Error_Handler();
   }
 
-  /* ADC1 clock = APB2 / 6 = 12MHz, within the STM32F103 14MHz limit. */
+  /* ADC1 时钟为 APB2 / 6 = 12 MHz，低于 STM32F103 的 14 MHz 上限。 */
   PeriphClkInit.PeriphClockSelection = RCC_PERIPHCLK_ADC;
   PeriphClkInit.AdcClockSelection = RCC_ADCPCLK2_DIV6;
   if (HAL_RCCEx_PeriphCLKConfig(&PeriphClkInit) != HAL_OK)
@@ -210,7 +210,7 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
 void Error_Handler(void)
 {
   /* USER CODE BEGIN Error_Handler_Debug */
-  /* User can add his own implementation to report the HAL error return state */
+  /* 用户可在此补充 HAL 错误状态的上报或保护处理。 */
   __disable_irq();
   while (1)
   {

@@ -1,4 +1,4 @@
-/* USER CODE BEGIN Header */
+﻿/* USER CODE BEGIN Header */
 /**
   ******************************************************************************
   * @file    stm32f1xx_hal_timebase_tim.c
@@ -17,16 +17,16 @@
   */
 /* USER CODE END Header */
 
-/* Includes ------------------------------------------------------------------*/
+/* 头文件 --------------------------------------------------------------------*/
 #include "stm32f1xx_hal.h"
 #include "stm32f1xx_hal_tim.h"
 
-/* Private typedef -----------------------------------------------------------*/
-/* Private define ------------------------------------------------------------*/
-/* Private macro -------------------------------------------------------------*/
-/* Private variables ---------------------------------------------------------*/
+/* 私有类型定义 --------------------------------------------------------------*/
+/* 私有宏定义 ----------------------------------------------------------------*/
+/* 私有宏 --------------------------------------------------------------------*/
+/* 私有变量 ------------------------------------------------------------------*/
 TIM_HandleTypeDef        htim2;
-/* Private function prototypes -----------------------------------------------*/
+/* 私有函数声明 --------------------------------------------------------------*/
 void TIM2_IRQHandler(void);
 /* Private functions ---------------------------------------------------------*/
 
@@ -49,15 +49,15 @@ HAL_StatusTypeDef HAL_InitTick(uint32_t TickPriority)
 
   HAL_StatusTypeDef     status = HAL_OK;
 
-  /* Enable TIM2 clock */
+  /* 使能 TIM2 时钟。 */
   __HAL_RCC_TIM2_CLK_ENABLE();
 
-  /* Get clock configuration */
+  /* 读取当前时钟配置。 */
   HAL_RCC_GetClockConfig(&clkconfig, &pFLatency);
 
   /* Get APB1 prescaler */
   uwAPB1Prescaler = clkconfig.APB1CLKDivider;
-  /* Compute TIM2 clock */
+  /* 计算 TIM2 输入时钟。 */
   if (uwAPB1Prescaler == RCC_HCLK_DIV1)
   {
     uwTimclock = HAL_RCC_GetPCLK1Freq();
@@ -67,10 +67,10 @@ HAL_StatusTypeDef HAL_InitTick(uint32_t TickPriority)
     uwTimclock = 2UL * HAL_RCC_GetPCLK1Freq();
   }
 
-  /* Compute the prescaler value to have TIM2 counter clock equal to 1MHz */
+  /* 计算预分频值，使 TIM2 计数时钟为 1 MHz。 */
   uwPrescalerValue = (uint32_t) ((uwTimclock / 1000000U) - 1U);
 
-  /* Initialize TIM2 */
+  /* 初始化 TIM2。 */
   htim2.Instance = TIM2;
 
   /* Initialize TIMx peripheral as follow:
@@ -89,16 +89,16 @@ HAL_StatusTypeDef HAL_InitTick(uint32_t TickPriority)
   if (status == HAL_OK)
   {
 
-    /* Start the TIM time Base generation in interrupt mode */
+    /* 以中断模式启动 TIM 时基。 */
     status = HAL_TIM_Base_Start_IT(&htim2);
     if (status == HAL_OK)
     {
-    /* Enable the TIM2 global Interrupt */
+    /* 使能 TIM2 全局中断。 */
         HAL_NVIC_EnableIRQ(TIM2_IRQn);
-      /* Configure the SysTick IRQ priority */
+      /* 配置 SysTick 中断优先级。 */
       if (TickPriority < (1UL << __NVIC_PRIO_BITS))
       {
-        /* Configure the TIM IRQ priority */
+        /* 配置 TIM 中断优先级。 */
         HAL_NVIC_SetPriority(TIM2_IRQn, TickPriority, 0U);
         uwTickPrio = TickPriority;
       }
@@ -109,7 +109,7 @@ HAL_StatusTypeDef HAL_InitTick(uint32_t TickPriority)
     }
   }
 
- /* Return function status */
+ /* 返回函数执行状态。 */
   return status;
 }
 
@@ -121,7 +121,7 @@ HAL_StatusTypeDef HAL_InitTick(uint32_t TickPriority)
   */
 void HAL_SuspendTick(void)
 {
-  /* Disable TIM2 update Interrupt */
+  /* 禁止 TIM2 更新中断。 */
   __HAL_TIM_DISABLE_IT(&htim2, TIM_IT_UPDATE);
 }
 
@@ -133,7 +133,7 @@ void HAL_SuspendTick(void)
   */
 void HAL_ResumeTick(void)
 {
-  /* Enable TIM2 Update interrupt */
+  /* 使能 TIM2 更新中断。 */
   __HAL_TIM_ENABLE_IT(&htim2, TIM_IT_UPDATE);
 }
 

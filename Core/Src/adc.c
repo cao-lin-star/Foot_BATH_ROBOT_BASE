@@ -1,4 +1,4 @@
-/* USER CODE BEGIN Header */
+﻿/* USER CODE BEGIN Header */
 /**
   ******************************************************************************
   * @file    adc.c
@@ -19,8 +19,8 @@ void MX_ADC1_Init(void)
   /*
    * Rank 1: PA0 / inlet NTC
    * Rank 2: PA1 / outlet NTC
-   * Settings mirror the bucket NTC: 12-bit, 71.5-cycle sampling, software
-   * trigger and continuous scan. DMA supplies the diagnostic-only samples.
+   * ADC 参数与桶体 NTC 保持一致：12 位分辨率、71.5 个周期采样时间、软件
+   * 触发并连续扫描。DMA 仅为诊断温度采样提供数据。
    */
   hadc1.Instance = ADC1;
   hadc1.Init.ScanConvMode = ADC_SCAN_ENABLE;

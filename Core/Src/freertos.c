@@ -1,4 +1,4 @@
-/* USER CODE BEGIN Header */
+﻿/* USER CODE BEGIN Header */
 /**
   ******************************************************************************
   * File Name          : freertos.c
@@ -17,13 +17,13 @@
   */
 /* USER CODE END Header */
 
-/* Includes ------------------------------------------------------------------*/
+/* 头文件 --------------------------------------------------------------------*/
 #include "FreeRTOS.h"
 #include "task.h"
 #include "main.h"
 #include "cmsis_os.h"
 
-/* Private includes ----------------------------------------------------------*/
+/* 私有头文件 ----------------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
 #include "color_light.h"
 #include "motor_control.h"
@@ -34,22 +34,22 @@
 
 /* USER CODE END Includes */
 
-/* Private typedef -----------------------------------------------------------*/
+/* 私有类型定义 --------------------------------------------------------------*/
 /* USER CODE BEGIN PTD */
 
 /* USER CODE END PTD */
 
-/* Private define ------------------------------------------------------------*/
+/* 私有宏定义 ----------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
 
 /* USER CODE END PD */
 
-/* Private macro -------------------------------------------------------------*/
+/* 私有宏 --------------------------------------------------------------------*/
 /* USER CODE BEGIN PM */
 
 /* USER CODE END PM */
 
-/* Private variables ---------------------------------------------------------*/
+/* 私有变量 ------------------------------------------------------------------*/
 /* USER CODE BEGIN Variables */
 
 /* USER CODE END Variables */
@@ -82,7 +82,7 @@ const osThreadAttr_t BaseStateTask_attributes = {
   .priority = (osPriority_t) osPriorityHigh,
 };
 
-/* Private function prototypes -----------------------------------------------*/
+/* 私有函数声明 --------------------------------------------------------------*/
 /* USER CODE BEGIN FunctionPrototypes */
 
 /* USER CODE END FunctionPrototypes */
@@ -117,22 +117,22 @@ void MX_FREERTOS_Init(void) {
   /* USER CODE END Init */
 
   /* USER CODE BEGIN RTOS_MUTEX */
-  /* add mutexes, ... */
+  /* 可在此添加互斥量。 */
   /* USER CODE END RTOS_MUTEX */
 
   /* USER CODE BEGIN RTOS_SEMAPHORES */
-  /* add semaphores, ... */
+  /* 可在此添加信号量。 */
   /* USER CODE END RTOS_SEMAPHORES */
 
   /* USER CODE BEGIN RTOS_TIMERS */
-  /* start timers, add new ones, ... */
+  /* 可在此启动或添加软件定时器。 */
   /* USER CODE END RTOS_TIMERS */
 
   /* USER CODE BEGIN RTOS_QUEUES */
-  /* add queues, ... */
+  /* 可在此添加消息队列。 */
   /* USER CODE END RTOS_QUEUES */
 
-  /* Create the thread(s) */
+  /* 创建任务。 */
   /* creation of BaseMotorTask */
   BaseMotorTaskHandle = osThreadNew(BaseMotor_Task, NULL, &BaseMotorTask_attributes);
 
@@ -146,11 +146,11 @@ void MX_FREERTOS_Init(void) {
   BaseStateTaskHandle = osThreadNew(BaseState_Task, NULL, &BaseStateTask_attributes);
 
   /* USER CODE BEGIN RTOS_THREADS */
-  /* add threads, ... */
+  /* 可在此添加任务。 */
   /* USER CODE END RTOS_THREADS */
 
   /* USER CODE BEGIN RTOS_EVENTS */
-  /* add events, ... */
+  /* 可在此添加事件。 */
   /* USER CODE END RTOS_EVENTS */
 
 }

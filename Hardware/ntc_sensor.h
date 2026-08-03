@@ -1,4 +1,4 @@
-#ifndef NTC_SENSOR_H
+﻿#ifndef NTC_SENSOR_H
 #define NTC_SENSOR_H
 
 #include "stm32f1xx_hal.h"
@@ -24,13 +24,13 @@ typedef struct
   uint8_t valid[NTC_SENSOR_CHANNEL_COUNT];
 } NtcSensorSnapshot_t;
 
-/* Calibrate ADC1 and start circular DMA scans; divider power follows main state. */
+/* 校准 ADC1 并启动循环 DMA 扫描；NTC 分压电路的供电由基站主状态统一管理。 */
 void NTC_Sensor_Init(void);
 
-/* Gate divider power in OFF/STANDBY and apply the V1 20ms filters otherwise. */
+/* 关机和待机时关闭分压电路，其余状态保持使能，并按 20 ms 周期执行双级滤波。 */
 void NTC_Sensor_TaskProcess(void);
 
-/* Copy the diagnostic snapshot; values are not used by base business logic. */
+/* 原子复制最近一次诊断快照；当前温度数据只写入日志，不参与基站业务控制。 */
 void NTC_Sensor_GetSnapshot(NtcSensorSnapshot_t *snapshot);
 
 #ifdef __cplusplus

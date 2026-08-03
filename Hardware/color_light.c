@@ -1,4 +1,4 @@
-#include "color_light.h"
+﻿#include "color_light.h"
 #include "tim.h"
 
 /* 红色通道当前亮度缓存，单位为百分比 0-100。 */

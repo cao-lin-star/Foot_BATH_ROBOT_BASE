@@ -1,4 +1,4 @@
-#include "log.h"
+﻿#include "log.h"
 #include "color_light.h"
 #include "main.h"
 #include "motor_control.h"
@@ -10,57 +10,57 @@
 #include <string.h>
 
 #ifndef LOGGING_TX_BUFFER_LEN
-#define LOGGING_TX_BUFFER_LEN       512U  /* 日志软件环形缓冲区长度�?*/
+#define LOGGING_TX_BUFFER_LEN       512U  /* 日志软件环形缓冲区长度。 */
 #endif
 
 #ifndef LOGGING_TX_DMA_CHUNK_LEN
-#define LOGGING_TX_DMA_CHUNK_LEN    64U   /* 单次 DMA 最大发送分块长度�?*/
+#define LOGGING_TX_DMA_CHUNK_LEN    64U   /* 单次 DMA 最大发送分块长度。 */
 #endif
 
 #ifndef LOGGING_PRINTF_BUFFER_LEN
-#define LOGGING_PRINTF_BUFFER_LEN   192U  /* 单条格式化日志缓冲区；长状态日志拆成两行输出�?*/
+#define LOGGING_PRINTF_BUFFER_LEN   192U  /* 单条格式化日志缓冲区；长状态日志拆成两行输出。 */
 #endif
 
 #if defined(__CC_ARM)
 #pragma import(__use_no_semihosting)
-/* Keil 无半主机模式下的 FILE 占位结构�?*/
+/* Keil 无半主机模式下的 FILE 占位结构。 */
 struct __FILE
 {
-  int handle;  /* 标准库要求的文件句柄字段，占位使用�?*/
+  int handle;  /* 标准库要求的文件句柄字段，占位使用。 */
 };
-FILE __stdout;  /* printf 标准输出重定向目标�?*/
+FILE __stdout;  /* printf 标准输出重定向目标。 */
 
-/* Keil 标准库退出钩子，避免链接半主机依赖�?*/
+/* Keil 标准库退出钩子，避免链接半主机依赖。 */
 void _sys_exit(int x)
 {
   (void)x;
 }
 #endif
 
-/* 最近一次日志发送状态，HAL_OK 表示成功，HAL_BUSY/HAL_ERROR 表示异常�?*/
+/* 最近一次日志发送状态，HAL_OK 表示成功，HAL_BUSY/HAL_ERROR 表示异常。 */
 static volatile HAL_StatusTypeDef logging_last_status = HAL_OK;
-/* 软件环形缓冲区：业务任务写入日志，DMA 任务分块搬运到串口�?*/
+/* 软件环形缓冲区：业务任务写入日志，DMA 任务分块搬运到串口。 */
 static uint8_t logging_tx_buffer[LOGGING_TX_BUFFER_LEN];
-/* DMA 专用发送缓冲区，避免发送期间环形缓冲区 head/tail 改变�?*/
+/* DMA 专用发送缓冲区，避免发送期间环形缓冲区 head/tail 改变。 */
 static uint8_t logging_tx_dma_buffer[LOGGING_TX_DMA_CHUNK_LEN];
-/* 环形缓冲区写入位置�?*/
+/* 环形缓冲区写入位置。 */
 static volatile uint16_t logging_tx_head;
-/* 环形缓冲区读取位置�?*/
+/* 环形缓冲区读取位置。 */
 static volatile uint16_t logging_tx_tail;
-/* DMA 发送忙标志�? 表示当前已有分块在发送�?*/
+/* DMA 发送忙标志。 表示当前已有分块在发送。 */
 static volatile uint8_t logging_dma_busy;
 
-/* 按进入临界区前的中断状态恢复中断�?*/
+/* 按进入临界区前的中断状态恢复中断。 */
 static void Logging_RestoreIrq(uint32_t primask)
 {
-  /* 只在进入临界区前中断为开启状态时恢复，避免破坏外层临界区�?*/
+  /* 只在进入临界区前中断为开启状态时恢复，避免破坏外层临界区。 */
   if (primask == 0U)
   {
     __enable_irq();
   }
 }
 
-/* 计算环形缓冲区的下一个索引�?*/
+/* 计算环形缓冲区的下一个索引。 */
 static uint16_t Logging_NextIndex(uint16_t index)
 {
   index++;
@@ -71,16 +71,16 @@ static uint16_t Logging_NextIndex(uint16_t index)
   return index;
 }
 
-/* 如果当前空闲，则从环形缓冲区取一段日志并启动 DMA 发送�?*/
+/* 如果当前空闲，则从环形缓冲区取一段日志并启动 DMA 发送。 */
 static void Logging_StartTxDma(void)
 {
-  HAL_StatusTypeDef status;  /* HAL_UART_Transmit_DMA 的返回状态�?*/
-  uint32_t primask;          /* 进入临界区前的中断屏蔽状态�?*/
-  uint16_t length = 0U;      /* 本次准备发送的字节数�?*/
-  uint16_t next_tail;        /* 本次发送成功后 tail 应移动到的位置�?*/
+  HAL_StatusTypeDef status;  /* HAL_UART_Transmit_DMA 的返回状态。 */
+  uint32_t primask;          /* 进入临界区前的中断屏蔽状态。 */
+  uint16_t length = 0U;      /* 本次准备发送的字节数。 */
+  uint16_t next_tail;        /* 本次发送成功后 tail 应移动到的位置。 */
 
   /*
-   * 从环形缓冲区复制一小段�?DMA 专用缓冲区�?   * DMA 正在发送时不能直接使用环形缓冲区，因为 head/tail 会继续变化�?   */
+   * 从环形缓冲区复制一小段。DMA 专用缓冲区。   * DMA 正在发送时不能直接使用环形缓冲区，因为 head/tail 会继续变化。   */
   primask = __get_PRIMASK();
   __disable_irq();
   if ((logging_dma_busy != 0U) || (logging_tx_head == logging_tx_tail))
@@ -124,20 +124,20 @@ static void Logging_StartTxDma(void)
   Logging_RestoreIrq(primask);
 }
 
-/* 将一段字节写入日志环形缓冲区，并尝试启动 DMA 发送�?*/
+/* 将一段字节写入日志环形缓冲区，并尝试启动 DMA 发送。 */
 static void Logging_WriteBuffer(const uint8_t *data, uint16_t length)
 {
-  uint16_t next_head;  /* 写入一个字节后的候�?head�?*/
-  uint16_t index;      /* data 遍历索引�?*/
-  uint32_t primask;    /* 进入临界区前的中断屏蔽状态�?*/
-  uint8_t overflow = 0U; /* 环形缓冲区满标志�?*/
+  uint16_t next_head;  /* 写入一个字节后的候选 head。 */
+  uint16_t index;      /* data 遍历索引。 */
+  uint32_t primask;    /* 进入临界区前的中断屏蔽状态。 */
+  uint8_t overflow = 0U; /* 环形缓冲区满标志。 */
 
   if ((data == NULL) || (length == 0U))
   {
     return;
   }
 
-  /* 写环形缓冲区时短暂关中断，防�?DMA 完成回调同时移动 tail�?*/
+  /* 写环形缓冲区时短暂关中断，防止 DMA 完成回调同时移动 tail。 */
   primask = __get_PRIMASK();
   __disable_irq();
   for (index = 0U; index < length; index++)
@@ -158,20 +158,20 @@ static void Logging_WriteBuffer(const uint8_t *data, uint16_t length)
   Logging_StartTxDma();
 }
 
-/* printf/fputc 重定向入口，把单字符写入日志缓冲区�?*/
+/* printf/fputc 重定向入口，把单字符写入日志缓冲区。 */
 int fputc(int ch, FILE *f)
 {
-  uint8_t data = (uint8_t)ch;  /* 待发送字符�?*/
+  uint8_t data = (uint8_t)ch;  /* 待发送字符。 */
 
   (void)f;
   Logging_WriteBuffer(&data, 1U);
   return ch;
 }
 
-/* 初始化日志环形缓冲区和发送状态�?*/
+/* 初始化日志环形缓冲区和发送状态。 */
 void Logging_Init(void)
 {
-  uint32_t primask;  /* 进入临界区前的中断屏蔽状态�?*/
+  uint32_t primask;  /* 进入临界区前的中断屏蔽状态。 */
 
   primask = __get_PRIMASK();
   __disable_irq();
@@ -184,11 +184,11 @@ void Logging_Init(void)
   Logging_Print("BASE LOG is ready\r\n");
 }
 
-/* 写入一个以 '\0' 结尾的字符串日志�?*/
+/* 写入一个以 '\0' 结尾的字符串日志。 */
 void Logging_Print(const char *msg)
 {
-  size_t length;  /* 剩余待写入长度�?*/
-  uint16_t chunk; /* 单次写入长度，受 uint16_t 参数限制�?*/
+  size_t length;  /* 剩余待写入长度。 */
+  uint16_t chunk; /* 单次写入长度，受 uint16_t 参数限制。 */
 
   if (msg == NULL)
   {
@@ -205,13 +205,13 @@ void Logging_Print(const char *msg)
   }
 }
 
-/* 格式化并写入一�?printf 风格日志�?*/
+/* 格式化并写入一条 printf 风格日志。 */
 void Logging_Printf(const char *fmt, ...)
 {
-  va_list args;                         /* 可变参数列表�?*/
-  char buffer[LOGGING_PRINTF_BUFFER_LEN]; /* 格式化临时缓冲区�?*/
-  int length;                           /* vsnprintf 返回长度�?*/
-  uint8_t truncated = 0U;               /* 日志是否被截断�?*/
+  va_list args;                         /* 可变参数列表。 */
+  char buffer[LOGGING_PRINTF_BUFFER_LEN]; /* 格式化临时缓冲区。 */
+  int length;                           /* vsnprintf 返回长度。 */
+  uint8_t truncated = 0U;               /* 日志是否被截断。 */
 
   if (fmt == NULL)
   {
@@ -241,7 +241,7 @@ void Logging_Printf(const char *fmt, ...)
   }
 }
 
-/* 周期性打印基站核心状态�?*/
+/* 周期性打印基站核心状态。 */
 #if 0
 void Logging_TaskProcess(void)
 {
@@ -251,7 +251,7 @@ void Logging_TaskProcess(void)
   err1 = SystemMonitor_GetErrCode1();
   err2 = SystemMonitor_GetErrCode2();
 
-  /* 每秒打印一次核心状态，便于通过 LinuxTX1/LinuxRX1 日志口观察流程�?*/
+  /* 每秒打印一次核心状态，便于通过 LinuxTX1/LinuxRX1 日志口观察流程。 */
   Logging_Printf("[BASE] CMD=%02X | LINK=%u | BST=%02X T=%u EL=%lus TS=%lus | CW=%u TW=%u WIN=%u | ERR=%02X/%02X LOW=%u/%u/%u LB=%u\r\n",
                  SystemMonitor_GetCommand(),
                  SystemMonitor_GetLinkStatus(),
@@ -270,7 +270,7 @@ void Logging_TaskProcess(void)
                  ((err1 & BASE_ERR1_LEVEL_BOARD) != 0U) ? 1U : 0U);
 }
 
-/* 返回最近一次日志发送状态�?*/
+/* 返回最近一次日志发送状态。 */
 #endif
 
 void Logging_TaskProcess(void)
@@ -361,10 +361,10 @@ HAL_StatusTypeDef Logging_GetLastStatus(void)
   return logging_last_status;
 }
 
-/* USART1 TX DMA 发送完成后继续发送下一段日志�?*/
+/* USART1 TX DMA 发送完成后继续发送下一段日志。 */
 void Logging_TxCpltCallback(UART_HandleTypeDef *huart)
 {
-  uint32_t primask;  /* 进入临界区前的中断屏蔽状态�?*/
+  uint32_t primask;  /* 进入临界区前的中断屏蔽状态。 */
 
   if (huart != &huart1)
   {
@@ -379,10 +379,10 @@ void Logging_TxCpltCallback(UART_HandleTypeDef *huart)
   Logging_StartTxDma();
 }
 
-/* USART1 �?DMA 发送错误后恢复状态并尝试继续发送�?*/
+/* USART1 的 DMA 发送错误后恢复状态并尝试继续发送。 */
 void Logging_ErrorCallback(UART_HandleTypeDef *huart)
 {
-  uint32_t primask;  /* 进入临界区前的中断屏蔽状态�?*/
+  uint32_t primask;  /* 进入临界区前的中断屏蔽状态。 */
 
   if (huart != &huart1)
   {

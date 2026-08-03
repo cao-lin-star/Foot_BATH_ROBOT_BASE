@@ -1,20 +1,24 @@
-#include "ntc_sensor.h"
+﻿#include "ntc_sensor.h"
 #include "adc.h"
 #include "main.h"
 #include "system_monitor.h"
 #include <math.h>
 #include <string.h>
 
-/* Keep these parameters identical to the current Foot_bath_robot_V1 code. */
-#define NTC_FILTER_DIV          8U
-#define NTC_TEMP_FILTER_DIV     16U
-#define NTC_R0_OHMS             10000.0f
-#define NTC_BETA                3950.0f
-#define NTC_T0_K                298.15f
-#define NTC_FIXED_OHMS          100000.0f
-#define NTC_ADC_VREF_MV         3300U
+/*
+ * NTC 参数与桶体 Foot_bath_robot_V1 当前实现保持一致。
+ * 两级一阶低通滤波分别作用于 ADC 原始值和换算后的温度，可降低水泵、加热器
+ * 等负载切换引入的瞬态干扰；滤波除数越大，输出越平稳，但响应速度也越慢。
+ */
+#define NTC_FILTER_DIV          8U          /* ADC 原始采样值低通滤波除数。 */
+#define NTC_TEMP_FILTER_DIV     16U         /* 温度值二级低通滤波除数。 */
+#define NTC_R0_OHMS             10000.0f    /* NTC 在 25 ℃时的标称阻值：10 kΩ。 */
+#define NTC_BETA                3950.0f     /* NTC 的 B 值，用于 Beta 方程换算温度。 */
+#define NTC_T0_K                298.15f     /* 标称温度 25 ℃对应的开尔文温度。 */
+#define NTC_FIXED_OHMS          100000.0f   /* 分压电路固定电阻阻值：100 kΩ。 */
+#define NTC_ADC_VREF_MV         3300U       /* ADC 参考电压：3.3 V。 */
 
-/* Rank order must match MX_ADC1_Init(): inlet first, outlet second. */
+/* DMA 数组顺序必须与 MX_ADC1_Init() 的通道顺序一致：先记录进水口，再记录出水口。 */
 static volatile uint16_t ntc_adc_dma[NTC_SENSOR_CHANNEL_COUNT];
 static uint32_t ntc_raw_filter_acc[NTC_SENSOR_CHANNEL_COUNT];
 static float ntc_temp_filter_c[NTC_SENSOR_CHANNEL_COUNT];
@@ -67,7 +71,7 @@ static float NTC_CalcTemperature(uint16_t raw)
     return -100.0f;
   }
 
-  /* This equation intentionally matches the current V1 implementation. */
+  /* 使用与桶体 V1 相同的 Beta 方程，先由分压值计算 NTC 电阻，再换算摄氏温度。 */
   ratio = (float)raw / 4095.0f;
   ntc_ohms = NTC_FIXED_OHMS * (1.0f - ratio) / ratio;
   if (ntc_ohms <= 1.0f)
@@ -167,11 +171,11 @@ void NTC_Sensor_TaskProcess(void)
     ntc_power_enabled = should_enable;
     NTC_ResetMeasurements();
 
-    /* Wait one 20ms task period after power-up before accepting ADC data. */
+    /* 分压电路上电后等待一个 20 ms 任务周期，避开使能瞬间尚未稳定的 ADC 数据。 */
     return;
   }
 
-  /* NTC is diagnostic-only: an ADC startup failure must not block base logic. */
+  /* NTC 当前只用于诊断日志；即使 ADC 启动失败，也不能阻塞原有基站业务逻辑。 */
   if ((ntc_sampling_active == 0U) || (ntc_power_enabled == 0U))
   {
     return;

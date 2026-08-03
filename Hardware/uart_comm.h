@@ -1,4 +1,4 @@
-#ifndef UART_COMM_H
+﻿#ifndef UART_COMM_H
 #define UART_COMM_H
 
 #include "stm32f1xx_hal.h"

@@ -1,4 +1,4 @@
-/* USER CODE BEGIN Header */
+﻿/* USER CODE BEGIN Header */
 /**
   ******************************************************************************
   * @file    dma.c
@@ -18,7 +18,7 @@
   */
 /* USER CODE END Header */
 
-/* Includes ------------------------------------------------------------------*/
+/* 头文件 --------------------------------------------------------------------*/
 #include "dma.h"
 
 /* USER CODE BEGIN 0 */
@@ -26,7 +26,7 @@
 /* USER CODE END 0 */
 
 /*----------------------------------------------------------------------------*/
-/* Configure DMA                                                              */
+/* 配置 DMA ------------------------------------------------------------------*/
 /*----------------------------------------------------------------------------*/
 
 /* USER CODE BEGIN 1 */
@@ -34,15 +34,15 @@
 /* USER CODE END 1 */
 
 /**
-  * Enable DMA controller clock
+  * 使能 DMA 控制器时钟。
   */
 void MX_DMA_Init(void)
 {
 
-  /* DMA controller clock enable */
+  /* 使能 DMA 控制器时钟。 */
   __HAL_RCC_DMA1_CLK_ENABLE();
 
-  /* DMA interrupt init */
+  /* 初始化 DMA 中断。 */
   /*
    * DMA 通道分配：
    *   DMA1_Channel1 = ADC1，两路 NTC 连续扫描
@@ -52,22 +52,22 @@ void MX_DMA_Init(void)
    *   DMA1_Channel6 = USART2_RX，液位传感器接收
    *   DMA1_Channel7 = USART2_TX，液位传感器发送预留
    */
-  /* DMA1_Channel1_IRQn interrupt configuration */
+  /* DMA1_Channel1_IRQn 中断配置。 */
   HAL_NVIC_SetPriority(DMA1_Channel1_IRQn, 6, 0);
   HAL_NVIC_EnableIRQ(DMA1_Channel1_IRQn);
-  /* DMA1_Channel2_IRQn interrupt configuration */
+  /* DMA1_Channel2_IRQn 中断配置。 */
   HAL_NVIC_SetPriority(DMA1_Channel2_IRQn, 6, 0);
   HAL_NVIC_EnableIRQ(DMA1_Channel2_IRQn);
-  /* DMA1_Channel3_IRQn interrupt configuration */
+  /* DMA1_Channel3_IRQn 中断配置。 */
   HAL_NVIC_SetPriority(DMA1_Channel3_IRQn, 6, 0);
   HAL_NVIC_EnableIRQ(DMA1_Channel3_IRQn);
-  /* DMA1_Channel4_IRQn interrupt configuration */
+  /* DMA1_Channel4_IRQn 中断配置。 */
   HAL_NVIC_SetPriority(DMA1_Channel4_IRQn, 6, 0);
   HAL_NVIC_EnableIRQ(DMA1_Channel4_IRQn);
-  /* DMA1_Channel6_IRQn interrupt configuration */
+  /* DMA1_Channel6_IRQn 中断配置。 */
   HAL_NVIC_SetPriority(DMA1_Channel6_IRQn, 6, 0);
   HAL_NVIC_EnableIRQ(DMA1_Channel6_IRQn);
-  /* DMA1_Channel7_IRQn interrupt configuration */
+  /* DMA1_Channel7_IRQn 中断配置。 */
   HAL_NVIC_SetPriority(DMA1_Channel7_IRQn, 6, 0);
   HAL_NVIC_EnableIRQ(DMA1_Channel7_IRQn);
 
